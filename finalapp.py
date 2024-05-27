@@ -17,8 +17,8 @@ os.makedirs(ANALYSIS_RESULTS_PATH, exist_ok=True)
 
 # Function to download 10-K filings
 @st.cache_data
-def download_10k_filings(ticker, download_path):
-    dl = Downloader(download_path)
+def download_10k_filings(ticker, email_address, download_path):
+    dl = Downloader(ticker, email_address, download_path)
     try:
         print(f"Downloading 10-K for {ticker}")
         dl.get("10-K", ticker, after="1995-12-31", before="2023-01-01")
@@ -163,12 +163,13 @@ st.title('10-K Filings Analysis App')
 st.sidebar.header('Settings')
 ticker_input = st.sidebar.text_input('Enter Company Ticker (e.g., AAPL, MSFT, TSLA)', 'AAPL')
 openai_api_key = st.sidebar.text_input('Enter your OpenAI API Key', '')
+email_address = "20150613rke3@gmail.com"
 
 if st.sidebar.button('Download and Analyze'):
     with st.spinner('Downloading 10-K filings...'):
         filings_dir = os.path.join(CLEANED_DATA_PATH, ticker_input)
         os.makedirs(filings_dir, exist_ok=True)
-        download_10k_filings(ticker_input, filings_dir)
+        download_10k_filings(ticker_input, email_address, filings_dir)
         st.success('Download complete!')
         
     with st.spinner('Processing and cleaning filings...'):
