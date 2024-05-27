@@ -17,8 +17,8 @@ os.makedirs(ANALYSIS_RESULTS_PATH, exist_ok=True)
 
 # Function to download 10-K filings
 @st.cache_data
-def download_10k_filings(ticker, emailaddress, download_path):
-    dl = Downloader(ticker, emailaddress, download_path)
+def download_10k_filings(ticker, download_path):
+    dl = Downloader(download_path)
     try:
         print(f"Downloading 10-K for {ticker}")
         dl.get("10-K", ticker, after="1995-12-31", before="2023-01-01")
