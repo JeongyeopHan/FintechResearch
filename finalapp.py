@@ -4,14 +4,27 @@ import json
 import pandas as pd
 import re
 from bs4 import BeautifulSoup
+from sec_edgar_downloader import Downloader
 import openai
 
-# Ensure directories exist
+# Set paths
 CLEANED_DATA_PATH = "cleaned_data"
 ANALYSIS_RESULTS_PATH = "analysis_results"
 
+# Ensure directories exist
 os.makedirs(CLEANED_DATA_PATH, exist_ok=True)
 os.makedirs(ANALYSIS_RESULTS_PATH, exist_ok=True)
+
+# Function to download 10-K filings
+@st.cache_data
+def download_10k_filings(ticker, download_path):
+    dl = Downloader(download_path)
+    try:
+        print(f"Downloading 10-K for {ticker}")
+        dl.get("10-K", ticker, after="1995-12-31", before="2023-01-01")
+    except Exception as e:
+        print(f"An error occurred for {ticker}: {e}")
+    print("Download complete.")
 
 # Function to remove HTML tags
 def remove_html_tags(text):
@@ -45,29 +58,30 @@ def extract_relevant_sections(text):
         start_idx = text.find(start_phrase)
         end_idx = text.find(end_phrase, start_idx)
         if start_idx != -1 and end_idx != -1:
-            extracted_sections[key] = text[start_idx:end_idx]
+            extracted_sections[key] = text[start_idx:endidx]
         else:
             extracted_sections[key] = ""
 
     return extracted_sections
 
 # Function to process and clean filings
-def process_and_clean_filings(uploaded_files):
+def process_and_clean_filings(filings_dir, ticker):
     extracted_data = []
 
-    for uploaded_file in uploaded_files:
-        text = uploaded_file.read().decode("utf-8")
-        sections = extract_relevant_sections(text)
-        cleaned_sections = {key: clean_text(value) for key, value in sections.items()}
-        extracted_data.append({
-            'Year': uploaded_file.name.split('.')[0],
-            'Ticker': uploaded_file.name.split('_')[0],
-            'MD&A': cleaned_sections['mdna'],
-            'Risk Factors': cleaned_sections['risk_factors'],
-            'Financials': cleaned_sections['financials']
-        })
+    for filename in os.listdir(filings_dir):
+        if filename.endswith(".txt"):
+            with open(os.path.join(filings_dir, filename), 'r') as file:
+                text = file.read()
+                sections = extract_relevant_sections(text)
+                cleaned_sections = {key: clean_text(value) for key, value in sections.items()}
+                extracted_data.append({
+                    'Year': filename.split('.')[0],
+                    'Ticker': ticker,
+                    'MD&A': cleaned_sections['mdna'],
+                    'Risk Factors': cleaned_sections['risk_factors'],
+                    'Financials': cleaned_sections['financials']
+                })
     
-    ticker = extracted_data[0]['Ticker']
     cleaned_data_path = os.path.join(CLEANED_DATA_PATH, f"{ticker}_cleaned_filings.json")
     with open(cleaned_data_path, "w") as outfile:
         json.dump(extracted_data, outfile)
@@ -149,14 +163,16 @@ st.title('10-K Filings Analysis App')
 st.sidebar.header('Settings')
 ticker_input = st.sidebar.text_input('Enter Company Ticker (e.g., AAPL, MSFT, TSLA)', 'AAPL')
 openai_api_key = st.sidebar.text_input('Enter your OpenAI API Key', '')
-email_address = "20150613rke3@gmail.com"
 
-# Allow users to upload files
-uploaded_files = st.file_uploader("Upload the downloaded 10-K filings", accept_multiple_files=True, type=["txt"])
-
-if uploaded_files and st.sidebar.button('Analyze Uploaded Filings'):
+if st.sidebar.button('Download and Analyze'):
+    with st.spinner('Downloading 10-K filings...'):
+        filings_dir = os.path.join(CLEANED_DATA_PATH, ticker_input)
+        os.makedirs(filings_dir, exist_ok=True)
+        download_10k_filings(ticker_input, filings_dir)
+        st.success('Download complete!')
+        
     with st.spinner('Processing and cleaning filings...'):
-        cleaned_data_path = process_and_clean_filings(uploaded_files)
+        cleaned_data_path = process_and_clean_filings(filings_dir, ticker_input)
         st.success('Processing complete!')
         
     with st.spinner('Loading cleaned data...'):
