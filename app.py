@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import json
 import pandas as pd
-import plotly.express as px
+# import plotly.express as px
 from download import download_10k_filings
 from dataprocess import process_and_clean_filings
 from text_analysis import analyze_risk_factors, analyze_mda_sentiment, analyze_financial_performance, load_cleaned_data, save_analysis_results
