@@ -2,31 +2,16 @@ import streamlit as st
 import os
 import json
 import pandas as pd
-# import plotly.express as px
 import re
 from bs4 import BeautifulSoup
-from sec_edgar_downloader import Downloader
 import openai
 
-# Set paths
-DOWNLOAD_PATH = "data/tickers"
-CLEANED_DATA_PATH = "data/cleaned_data"
-ANALYSIS_RESULTS_PATH = "data/analysis_results"
-
 # Ensure directories exist
-os.makedirs(DOWNLOAD_PATH, exist_ok=True)
+CLEANED_DATA_PATH = "cleaned_data"
+ANALYSIS_RESULTS_PATH = "analysis_results"
+
 os.makedirs(CLEANED_DATA_PATH, exist_ok=True)
 os.makedirs(ANALYSIS_RESULTS_PATH, exist_ok=True)
-
-# Function to download 10-K filings
-def download_10k_filings(ticker, emailaddress, download_path):
-    dl = Downloader(ticker, email_address, download_path)
-    try:
-        print(f"Downloading 10-K for {ticker}")
-        dl.get("10-K", ticker, after="1995-12-31", before="2023-01-01")
-    except Exception as e:
-        print(f"An error occurred for {ticker}: {e}")
-    print("Download complete.")
 
 # Function to remove HTML tags
 def remove_html_tags(text):
@@ -67,24 +52,22 @@ def extract_relevant_sections(text):
     return extracted_sections
 
 # Function to process and clean filings
-def process_and_clean_filings(ticker, download_path):
-    filings_dir = os.path.join(download_path, ticker, "10-K")
+def process_and_clean_filings(uploaded_files):
     extracted_data = []
 
-    for filename in os.listdir(filings_dir):
-        if filename.endswith(".txt"):
-            with open(os.path.join(filings_dir, filename), 'r') as file:
-                text = file.read()
-                sections = extract_relevant_sections(text)
-                cleaned_sections = {key: clean_text(value) for key, value in sections.items()}
-                extracted_data.append({
-                    'Year': filename.split('.')[0],
-                    'Ticker': ticker,
-                    'MD&A': cleaned_sections['mdna'],
-                    'Risk Factors': cleaned_sections['risk_factors'],
-                    'Financials': cleaned_sections['financials']
-                })
+    for uploaded_file in uploaded_files:
+        text = uploaded_file.read().decode("utf-8")
+        sections = extract_relevant_sections(text)
+        cleaned_sections = {key: clean_text(value) for key, value in sections.items()}
+        extracted_data.append({
+            'Year': uploaded_file.name.split('.')[0],
+            'Ticker': uploaded_file.name.split('_')[0],
+            'MD&A': cleaned_sections['mdna'],
+            'Risk Factors': cleaned_sections['risk_factors'],
+            'Financials': cleaned_sections['financials']
+        })
     
+    ticker = extracted_data[0]['Ticker']
     cleaned_data_path = os.path.join(CLEANED_DATA_PATH, f"{ticker}_cleaned_filings.json")
     with open(cleaned_data_path, "w") as outfile:
         json.dump(extracted_data, outfile)
@@ -102,7 +85,7 @@ def analyze_text(question, text, api_key):
     response = openai.ChatCompletion.create(
         model="gpt-4",
         messages=[
-            {"role": "system", "contet": question},
+            {"role": "system", "content": question},
             {"role": "user", "content": text}
         ]
     )
@@ -156,7 +139,8 @@ def analyze_financial_performance(data, api_key):
 # Function to save analysis results
 def save_analysis_results(insights_df, ticker, analysis_type):
     analysis_path = os.path.join(ANALYSIS_RESULTS_PATH, f"{ticker}_{analysis_type}_analysis_results.json")
-    insights_df.to_json(analysis_path, orient='records')
+    with open(analysis_path, "w") as outfile:
+        json.dump(insights_df.to_dict(orient='records'), outfile)
     return analysis_path
 
 # Streamlit app
@@ -164,15 +148,15 @@ st.title('10-K Filings Analysis App')
 
 st.sidebar.header('Settings')
 ticker_input = st.sidebar.text_input('Enter Company Ticker (e.g., AAPL, MSFT, TSLA)', 'AAPL')
-openai_api_key = st.sidebar.text_input('Enter your openAi key')
+openai_api_key = st.sidebar.text_input('Enter your OpenAI API Key', '')
 email_address = "20150613rke3@gmail.com"
-if st.sidebar.button('Download and Analyze'):
-    with st.spinner('Downloading 10-K filings...'):
-        download_10k_filings(ticker_input, email_address, DOWNLOAD_PATH)
-        st.success('Download complete!')
-        
+
+# Allow users to upload files
+uploaded_files = st.file_uploader("Upload the downloaded 10-K filings", accept_multiple_files=True, type=["txt"])
+
+if uploaded_files and st.sidebar.button('Analyze Uploaded Filings'):
     with st.spinner('Processing and cleaning filings...'):
-        cleaned_data_path = process_and_clean_filings(ticker_input, DOWNLOAD_PATH)
+        cleaned_data_path = process_and_clean_filings(uploaded_files)
         st.success('Processing complete!')
         
     with st.spinner('Loading cleaned data...'):
@@ -205,12 +189,3 @@ if st.sidebar.button('Download and Analyze'):
 
     st.subheader('Financial Performance Analysis')
     st.write(financial_performance_df)
-
-    # # Visualization
-    # st.subheader('MD&A Sentiment Over the Years')
-    # fig = px.line(mda_sentiment_df, x='Year', y='MD&A Sentiment Analysis', title=f'{ticker_input} MD&A Sentiment Analysis Over the Years')
-    # st.plotly_chart(fig)
-
-    # st.subheader('Financial Performance Over the Years')
-    # fig = px.line(financial_performance_df, x='Year', y='Financial Performance Analysis', title=f'{ticker_input} Financial Performance Over the Years')
-    # st.plotly_chart(fig)
