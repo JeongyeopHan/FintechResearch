@@ -1,4 +1,3 @@
-streamlit
 beautifulsoup4
 langchain==0.0.171
 langchain-community==0.0.3
@@ -7,4 +6,6 @@ pydantic
 requests
 lxml
 sec_edgar_downloader
-chromadb
+streamlit==1.28.1
+chromadb==0.4.17
+pysqlite3-binary
