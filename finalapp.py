@@ -136,17 +136,22 @@ if st.button("Analyze"):
 
             # Define the questions
             risk_question = f"Summarize the main risks identified by {ticker} in its 10-K filings. In English."
-            mda_sentiment_question = f"Perform sentiment analysis on the extracted MD&A sections for {ticker}. Indicate whether the tone is generally positive, negative, or neutral."
+            mda_sentiment_question = f"Analyze the tone of the MD&A sections for {ticker}. Is the tone generally positive, negative, or neutral?"
 
             # Get answers from the agent
-            risk_response = risk_agent({"input": risk_question})
-            mda_sentiment_response = mda_agent({"input": mda_sentiment_question})
+            try:
+                risk_response = risk_agent({"input": risk_question})
+                st.write("Main Risks Identified:")
+                st.write(risk_response["output"])
+            except Exception as e:
+                st.error(f"Error processing risk factors question: {e}")
 
-            st.write("Main Risks Identified:")
-            st.write(risk_response["output"])
-
-            st.write("MD&A Sentiment Analysis Result:")
-            st.write(mda_sentiment_response["output"])
+            try:
+                mda_sentiment_response = mda_agent({"input": mda_sentiment_question})
+                st.write("MD&A Sentiment Analysis Result:")
+                st.write(mda_sentiment_response["output"])
+            except Exception as e:
+                st.error(f"Error processing MD&A sentiment analysis question: {e}")
 
         else:
             st.write("No filings found for the given ticker.")
