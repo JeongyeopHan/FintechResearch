@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup, FeatureNotFound
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain.vectorstores import Chroma
-from langchain.llms import OpenAI
+from langchain.llms import ChatOpenAI
 from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
@@ -26,7 +26,7 @@ if not openai_api_key:
 
 # Initialize OpenAI API
 os.environ["OPENAI_API_KEY"] = openai_api_key
-llm = OpenAI(temperature=0)
+llm = ChatOpenAI(temperature=0)
 
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
@@ -118,7 +118,7 @@ if st.button("Analyze"):
                 )
             ]
 
-            agent = initialize_agent(agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, tools=tools, llm=llm, verbose=True)
+            agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=tools, llm=llm, verbose=True)
 
             # Define the question
             question = f"Summarize the main risks identified by {ticker} in its 10-K filings. In English."
