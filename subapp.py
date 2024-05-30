@@ -118,10 +118,10 @@ if st.button("Analyze"):
                 )
             ]
 
-            agent = initialize_agent(agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, tools=tools, llm=llm, verbose=True)
+            agent = initialize_agent(agent=AgentType.AgentType.OPENAI_FUNCTIONS, tools=tools, llm=llm, verbose=True)
 
             # Define the question
-            question = f"Summarize the main risks identified by {ticker} in its 10-K filings. In English."
+            question = f"Identify major risks identified by {ticker} in its 10-K filings. In English."
             
             # Get answer from the agent
             response = agent({"input": question})
