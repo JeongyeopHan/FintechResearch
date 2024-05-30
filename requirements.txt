@@ -6,4 +6,4 @@ openai
 pydantic
 requests
 lxml
-edgar-crawler
+sec_edgar_downloader
