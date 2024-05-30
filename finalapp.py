@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from sec_api import ExtractorApi, XbrlApi
+from sec_api import ExtractorApi
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
@@ -15,7 +15,6 @@ openai_api_key = os.getenv("OPENAI_API_KEY")
 
 # Initialize APIs
 extractor_api = ExtractorApi(api_key=extractor_api_key)
-xbrl_api = XbrlApi(api_key=extractor_api_key)
 
 # Initialize OpenAI API
 os.environ["OPENAI_API_KEY"] = openai_api_key
@@ -29,18 +28,31 @@ if st.button("Analyze"):
     if ticker:
         filings = []
 
-        # Extract filings for the given ticker from 1995 to 2023
-        for year in range(1995, 2024):
-            try:
-                # Get the filing metadata
-                htm_url = f"https://www.sec.gov/Archives/edgar/data/{ticker}/{year}.htm"
-                xbrl_json = xbrl_api.xbrl_to_json(htm_url=htm_url)
+        # Construct the query to fetch 10-K filings for the given ticker
+        query = {
+            "query": {
+                "query_string": {
+                    "query": f"ticker:{ticker} AND filedAt:[1995-01-01 TO 2023-12-31] AND formType:\"10-K\""
+                }
+            },
+            "from": "0",
+            "size": "100",
+            "sort": [{"filedAt": {"order": "desc"}}]
+        }
 
-                # Extract the 'Risk Factors' section
-                section_text = extractor_api.get_section(htm_url, "1A", "text")
-                filings.append({"year": year, "text": section_text})
-            except Exception as e:
-                st.write(f"Error fetching data for year {year}: {e}")
+        try:
+            results = extractor_api.get_filings(query)
+            for filing in results["filings"]:
+                filing_url = filing["linkToFilingDetails"]
+                filing_date = filing["filedAt"]
+
+                try:
+                    section_text = extractor_api.get_section(filing_url, "1A", "text")
+                    filings.append({"date": filing_date, "text": section_text})
+                except Exception as e:
+                    st.write(f"Error fetching section 1A from {filing_url}: {e}")
+        except Exception as e:
+            st.write(f"Error fetching filings for ticker {ticker}: {e}")
 
         if filings:
             # Process filings with Langchain
