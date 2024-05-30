@@ -19,10 +19,6 @@ if not openai_api_key:
     st.error("API keys are not set properly. Please check your environment variables.")
     st.stop()
 
-# Initialize OpenAI API
-os.environ["OPENAI_API_KEY"] = openai_api_key
-llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
-
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
 
@@ -31,49 +27,37 @@ if st.button("Analyze"):
     if ticker:
         try:
             download_dir = download_filings(ticker)
-            st.write(f"Download directory: {download_dir}")
 
-            risk_db, mdna_db = analyze_filings(download_dir)
-            st.write(f"Found filings with risk factors and MD&A sections.")
+            # Ensure the download directory exists
+            if not os.path.exists(download_dir):
+                st.error(f"Download directory {download_dir} does not exist.")
+                st.stop()
 
-            class DocumentInput(BaseModel):
-                question: str = Field()
+            risk_factor_filings, mdna_filings = get_filings(download_dir)
 
-            risk_tools = [
-                Tool(
-                    args_schema=DocumentInput,
-                    name="risk_document_tool",
-                    description="Useful for answering questions about risk factors in the document",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=risk_db.as_retriever()),
-                )
-            ]
+            if risk_factor_filings and mdna_filings:
+                st.write(f"Found {len(risk_factor_filings)} filings with risk factors.")
+                st.write(f"Found {len(mdna_filings)} filings with MD&A sections.")
 
-            mdna_tools = [
-                Tool(
-                    args_schema=DocumentInput,
-                    name="mdna_document_tool",
-                    description="Useful for answering questions about MD&A sections in the document",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=mdna_db.as_retriever()),
-                )
-            ]
+                risk_agent, mdna_agent = analyze_filings(risk_factor_filings, mdna_filings, openai_api_key)
 
-            risk_agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=risk_tools, llm=llm, verbose=True)
-            mdna_agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=mdna_tools, llm=llm, verbose=True)
+                # Define the questions
+                risk_question = f"Identify five major risks identified by {ticker} in its 10-K filings. In English."
+                mdna_question = "What are the key strategic initiatives outlined by the company for future growth, and how does the company plan to address any identified risks or challenges in the coming fiscal year?"
 
-            risk_question = f"Identify five major risks identified by {ticker} in its 10-K filings. In English."
-            mdna_question = "What are the key strategic initiatives outlined by the company for future growth, and how does the company plan to address any identified risks or challenges in the coming fiscal year?"
+                # Get answers from the agents
+                risk_response = risk_agent({"input": risk_question})
+                mdna_response = mdna_agent({"input": mdna_question})
 
-            risk_response = risk_agent({"input": risk_question})
-            mdna_response = mdna_agent({"input": mdna_question})
+                st.write("Risk Factors Analysis:")
+                st.write(risk_response["output"])
 
-            st.write("Risk Factors Analysis:")
-            st.write(risk_response["output"])
-
-            st.write("MD&A Analysis:")
-            st.write(mdna_response["output"])
-
+                st.write("MD&A Analysis:")
+                st.write(mdna_response["output"])
+            else:
+                st.write("No filings found for the given ticker.")
         except Exception as e:
-            st.error(str(e))
+            st.error(f"An error occurred: {e}")
     else:
         st.write("Please enter a ticker symbol.")
 
