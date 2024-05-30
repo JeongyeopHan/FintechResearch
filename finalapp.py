@@ -64,6 +64,8 @@ if st.button("Analyze"):
                     end = text.find(next_section_title, start)
                     if start != -1 and end != -1:
                         return text[start:end].strip()
+                    elif start != -1:
+                        return text[start:].strip()  # In case the end section is not found
                     return ""
             except FeatureNotFound:
                 st.error("lxml parser not found. Please ensure it is installed.")
@@ -85,11 +87,17 @@ if st.button("Analyze"):
                         risk_factors_text = extract_section(filepath, "Item 1A. Risk Factors", "Item 1B.")
                         mda_text = extract_section(filepath, "Item 7. Management's Discussion and Analysis", "Item 7A.")
                         if risk_factors_text:
+                            st.write(f"Extracted Risk Factors from {filepath}")
                             filings.append(Document(page_content=risk_factors_text, metadata={"source": filepath}))
+                        else:
+                            st.write(f"No Risk Factors found in {filepath}")
                         if mda_text:
+                            st.write(f"Extracted M&As from {filepath}")
                             mda_year = filepath.split(os.path.sep)[-3]
                             if mda_year in ["2023", "2022", "2021"]:
                                 filings.append(Document(page_content=mda_text, metadata={"source": filepath, "type": "MDA"}))
+                        else:
+                            st.write(f"No M&As found in {filepath}")
 
         if filings:
             st.write(f"Found {len(filings)} filings with risk factors or M&As sections.")
