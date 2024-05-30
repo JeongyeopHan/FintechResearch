@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import tempfile
 from sec_edgar_downloader import Downloader
 from bs4 import BeautifulSoup
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -34,7 +35,7 @@ if st.button("Analyze"):
         # Initialize Downloader
         dl = Downloader("JHON", "jhondoe@gmail.com", ".")
 
-        # Download all 10-K filings for the ticker from 1995 to 2023
+        # Download all 10-K filings for the ticker from 2023 onward
         dl.get("10-K", ticker, after="2023-01-01", before="2023-12-31")
 
         # Directory where filings are downloaded
@@ -84,8 +85,15 @@ if st.button("Analyze"):
             split_texts = text_splitter.split_documents(filings)
 
             embeddings = OpenAIEmbeddings()
-            db = Chroma.from_documents(split_texts, embeddings, persist_directory="path/to/persist")
-            db.persist()
+            
+            # Use a temporary directory for Chroma persistence
+            with tempfile.TemporaryDirectory() as temp_dir:
+                try:
+                    db = Chroma.from_documents(split_texts, embeddings, persist_directory=temp_dir)
+                    db.persist()
+                except Exception as e:
+                    st.error(f"Error initializing Chroma: {e}")
+                    st.stop()
 
             class DocumentInput(BaseModel):
                 question: str = Field()
