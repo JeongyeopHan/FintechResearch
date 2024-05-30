@@ -53,17 +53,17 @@ if st.button("Analyze"):
 
         st.write(f"Checking directory: {download_dir}")
 
-        # Function to extract sections from filings
+        # Function to extract sections
         def extract_section(filepath, start_marker, end_marker):
             try:
                 with open(filepath, 'r', encoding='utf-8') as file:
                     soup = BeautifulSoup(file, 'lxml')
                     section_text = ""
-                    in_section = False
+                    section_found = False
                     for line in soup.get_text().splitlines():
                         if start_marker in line:
-                            in_section = True
-                        if in_section:
+                            section_found = True
+                        if section_found:
                             section_text += line + "\n"
                             if end_marker in line:
                                 break
@@ -85,18 +85,24 @@ if st.button("Analyze"):
                     if file == "full-submission.txt":
                         filepath = os.path.join(subdir_path, file)
                         st.write(f"Processing file: {filepath}")
-                        risk_factors_text = extract_section(filepath, "Item 1A.", "Item 1B.")
-                        mda_text = extract_section(filepath, "Item 7.", "Item 7A.")
-                        if risk_factors_text:
-                            risk_filings.append(Document(page_content=risk_factors_text, metadata={"source": filepath}))
-                        if mda_text:
-                            mda_filings.append(Document(page_content=mda_text, metadata={"source": filepath}))
+                        risk_section_text = extract_section(filepath, "Item 1A.", "Item 1B.")
+                        mda_section_text = extract_section(filepath, "Item 7.", "Item 7A.")
+                        if risk_section_text:
+                            risk_filings.append(Document(page_content=risk_section_text, metadata={"source": filepath}))
+                        if mda_section_text:
+                            mda_filings.append(Document(page_content=mda_section_text, metadata={"source": filepath}))
+
+        if risk_filings:
+            st.write(f"Found {len(risk_filings)} filings with risk factors.")
+        else:
+            st.write("No risk factors found for the given ticker.")
+
+        if mda_filings:
+            st.write(f"Found {len(mda_filings)} filings with MD&A sections.")
+        else:
+            st.write("No MD&A sections found for the given ticker.")
 
         if risk_filings or mda_filings:
-            st.write(f"Found {len(risk_filings)} filings with risk factors.")
-            st.write(f"Found {len(mda_filings)} filings with MD&A sections.")
-            
-            # Process filings with Langchain
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             risk_texts = text_splitter.split_documents(risk_filings)
             mda_texts = text_splitter.split_documents(mda_filings)
@@ -136,7 +142,7 @@ if st.button("Analyze"):
 
             # Define the questions
             risk_question = f"Summarize the main risks identified by {ticker} in its 10-K filings. In English."
-            mda_sentiment_question = f"Analyze the tone of the MD&A sections for {ticker}. Is the tone generally positive, negative, or neutral?"
+            mda_insight_question = f"Provide an overview of the financial performance and key insights from the MD&A sections of {ticker}'s 10-K filings."
 
             # Get answers from the agent
             try:
@@ -147,11 +153,11 @@ if st.button("Analyze"):
                 st.error(f"Error processing risk factors question: {e}")
 
             try:
-                mda_sentiment_response = mda_agent({"input": mda_sentiment_question})
-                st.write("MD&A Sentiment Analysis Result:")
-                st.write(mda_sentiment_response["output"])
+                mda_insight_response = mda_agent({"input": mda_insight_question})
+                st.write("MD&A Insights:")
+                st.write(mda_insight_response["output"])
             except Exception as e:
-                st.error(f"Error processing MD&A sentiment analysis question: {e}")
+                st.error(f"Error processing MD&A insights question: {e}")
 
         else:
             st.write("No filings found for the given ticker.")
