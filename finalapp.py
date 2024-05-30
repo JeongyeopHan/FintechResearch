@@ -13,7 +13,7 @@ from langchain.vectorstores import Chroma
 from langchain.llms import OpenAI
 from langchain.chains import RetrievalQA
 from langchain.schema import Document
-from collections import Counter
+from pydantic import BaseModel, Field
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -158,33 +158,6 @@ if st.button("Analyze"):
             st.write(responses[1])
             st.write("Sentiment Analysis:")
             st.write(responses[2])
-
-            # Define positive and negative words for sentiment analysis
-            positive_words = set(["good", "great", "positive", "beneficial", "advantageous", "successful", "favorable"])
-            negative_words = set(["bad", "poor", "negative", "detrimental", "disadvantageous", "unsuccessful", "unfavorable"])
-
-            def count_sentiment_words(text, positive_words, negative_words):
-                words = text.lower().split()
-                positive_count = sum(1 for word in words if word in positive_words)
-                negative_count = sum(1 for word in words if word in negative_words)
-                return positive_count, negative_count
-
-            # Extract sentiment counts for each year
-            year_sentiment_counts = {year: {"positive": 0, "negative": 0} for year in ["2021", "2022", "2023"]}
-            
-            def update_sentiment_counts(filings, year_sentiment_counts, positive_words, negative_words):
-                for doc in filings:
-                    for year in year_sentiment_counts.keys():
-                        if year in doc.metadata["source"]:
-                            positive_count, negative_count = count_sentiment_words(doc.page_content, positive_words, negative_words)
-                            year_sentiment_counts[year]["positive"] += positive_count
-                            year_sentiment_counts[year]["negative"] += negative_count
-
-            update_sentiment_counts(risk_filings, year_sentiment_counts, positive_words, negative_words)
-            update_sentiment_counts(mna_filings, year_sentiment_counts, positive_words, negative_words)
-
-            st.write("Sentiment Analysis (Positive and Negative Words Count) for Years 2021, 2022, 2023:")
-            st.write(year_sentiment_counts)
         else:
             st.write("No relevant sections found for the given ticker.")
     else:
