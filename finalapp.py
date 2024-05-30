@@ -8,9 +8,9 @@ import tempfile
 from sec_edgar_downloader import Downloader
 from bs4 import BeautifulSoup, FeatureNotFound
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings.huggingface import HuggingFaceEmbeddings
+from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
-from langchain.llms import ChatOpenAI
+from langchain.llms import OpenAI
 from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
@@ -26,7 +26,7 @@ if not openai_api_key:
 
 # Initialize OpenAI API
 os.environ["OPENAI_API_KEY"] = openai_api_key
-llm = ChatOpenAI(temperature=0)
+llm = OpenAI(temperature=0)
 
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
@@ -37,7 +37,7 @@ if st.button("Analyze"):
         filings = []
 
         # Initialize Downloader
-        dl = Downloader("JHON", "jhondoe@gmail.com", ".")
+        dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
 
         # Download all 10-K filings for the ticker from 2023 onward
         dl.get("10-K", ticker, after="2023-11-01", before="2023-12-31")
@@ -95,7 +95,7 @@ if st.button("Analyze"):
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             split_texts = text_splitter.split_documents(filings)
 
-            embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+            embeddings = OpenAIEmbeddings()
             
             # Use a temporary directory for Chroma persistence
             with tempfile.TemporaryDirectory() as temp_dir:
