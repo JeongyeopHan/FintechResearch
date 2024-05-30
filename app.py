@@ -5,18 +5,9 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import streamlit as st
 import os
 import tempfile
-from sec_edgar_downloader import Downloader
-from bs4 import BeautifulSoup, FeatureNotFound
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.chat_models import ChatOpenAI
-from langchain.chains import RetrievalQA
-from langchain.agents import initialize_agent, AgentType, Tool
-from pydantic import BaseModel, Field
 from langchain.schema import Document
-from task1_download import download_filings
-from task2_analysis import extract_risk_factors, analyze_filings
+from download_filings import download_10k_filings
+from analyze_filings import extract_risk_factors, analyze_filings
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -28,7 +19,6 @@ if not openai_api_key:
 
 # Initialize OpenAI API
 os.environ["OPENAI_API_KEY"] = openai_api_key
-llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
 
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
@@ -36,9 +26,10 @@ st.title("SEC Filings Analysis with ChatGPT")
 ticker = st.text_input("Enter the company ticker:")
 if st.button("Analyze"):
     if ticker:
-        filings = []
+        download_10k_filings(ticker)
 
-        download_dir = download_filings(ticker)
+        risk_factor_filings = []
+        download_dir = os.path.join(".", "sec-edgar-filings", ticker, "10-K")
 
         # Ensure the download directory exists
         if not os.path.exists(download_dir):
@@ -47,7 +38,7 @@ if st.button("Analyze"):
 
         st.write(f"Checking directory: {download_dir}")
 
-        # Iterate over downloaded filings directories and extract "Risk Factors"
+        # Iterate over downloaded filings directories and extract sections
         for root, dirs, files in os.walk(download_dir):
             for subdir in dirs:
                 subdir_path = os.path.join(root, subdir)
@@ -57,15 +48,16 @@ if st.button("Analyze"):
                     if file == "full-submission.txt":
                         filepath = os.path.join(subdir_path, file)
                         st.write(f"Processing file: {filepath}")
-                        section_text = extract_risk_factors(filepath)
-                        if section_text:
-                            filings.append(Document(page_content=section_text, metadata={"source": filepath}))
 
-        if filings:
-            st.write(f"Found {len(filings)} filings with risk factors.")
-            
-            # Analyze filings
-            result = analyze_filings(filings)
+                        # Extract Risk Factors
+                        risk_factors_text = extract_risk_factors(filepath)
+                        if risk_factors_text:
+                            risk_factor_filings.append(Document(page_content=risk_factors_text, metadata={"source": filepath}))
+
+        if risk_factor_filings:
+            st.write(f"Found {len(risk_factor_filings)} filings with risk factors.")
+            result = analyze_filings(risk_factor_filings)
+            st.write("Risk Factors Analysis:")
             st.write(result)
         else:
             st.write("No filings found for the given ticker.")
