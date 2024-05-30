@@ -9,9 +9,9 @@ from langchain.agents import initialize_agent, AgentType
 from langchain.tools import RetrievalQA, Tool
 from pydantic import BaseModel, Field
 
-# Set API keys
-extractor_api_key = "92c9dd860762df20722b795af0e4b9fc341ef27c1d888c609db50a2fbacee81a"
-openai_api_key = "sk-proj-mCXyTBtkG50GO2xQn6EDT3BlbkFJpIRJ2R3tfaea2S7Y6yhY"
+# Get API keys from environment variables
+extractor_api_key = os.getenv("EXTRACTOR_API_KEY")
+openai_api_key = os.getenv("OPENAI_API_KEY")
 
 # Initialize APIs
 extractor_api = ExtractorApi(api_key=extractor_api_key)
