@@ -38,8 +38,11 @@ def analyze_filings(filings):
 
     # Use a temporary directory for Chroma persistence
     with tempfile.TemporaryDirectory() as temp_dir:
-        db = Chroma.from_documents(split_texts, embeddings, persist_directory=temp_dir)
-        db.persist()
+        try:
+            db = Chroma.from_documents(split_texts, embeddings, persist_directory=temp_dir)
+            db.persist()
+        except Exception as e:
+            raise Exception(f"Error initializing Chroma: {e}")
 
     class DocumentInput(BaseModel):
         question: str = Field()
@@ -58,7 +61,7 @@ def analyze_filings(filings):
     agent = initialize_agent(agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, tools=tools, llm=llm, verbose=True)
 
     # Define the question
-    question = f"Summarize the main risks identified in the 10-K filings. In English."
+    question = "Summarize the main risks identified in the 10-K filings. In English."
 
     # Get answer from the agent
     response = agent({"input": question})
