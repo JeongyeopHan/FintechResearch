@@ -121,7 +121,7 @@ if st.button("Analyze"):
                 )
             ]
 
-            agent = initialize_agent(agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, tools=tools, llm=llm, verbose=True)
+            agent = initialize_agent(agent=AgentType.AgentType.OPENAI_FUNCTIONS, tools=tools, llm=llm, verbose=True)
 
             # Define the questions
             risk_question = f"Summarize the main risks identified by {ticker} in its 10-K filings. In English."
