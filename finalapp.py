@@ -40,7 +40,7 @@ if st.button("Analyze"):
         # Initialize Downloader
         dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
 
-        # Download all 10-K filings for the ticker from 2021 onward
+        # Download all 10-K filings for the ticker from 2018 onward
         dl.get("10-K", ticker, after="2018-01-01", before="2023-12-31")
 
         # Directory where filings are downloaded
@@ -103,19 +103,25 @@ if st.button("Analyze"):
             st.write("No MDA sections found for the given ticker.")
 
         if risk_filings or mna_filings:
+            # Combine the text from all filings
+            combined_risk_text = "\n".join([doc.page_content for doc in risk_filings])
+            combined_mna_text = "\n".join([doc.page_content for doc in mna_filings])
+
+            combined_documents = [
+                Document(page_content=combined_risk_text, metadata={"type": "Risk Factors"}),
+                Document(page_content=combined_mna_text, metadata={"type": "MDA"})
+            ]
+
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-            risk_texts = text_splitter.split_documents(risk_filings)
-            mna_texts = text_splitter.split_documents(mna_filings)
+            split_texts = text_splitter.split_documents(combined_documents)
 
             embeddings = OpenAIEmbeddings()
             
             # Use a temporary directory for Chroma persistence
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    risk_db = Chroma.from_documents(risk_texts, embeddings, persist_directory=temp_dir)
-                    risk_db.persist()
-                    mna_db = Chroma.from_documents(mna_texts, embeddings, persist_directory=temp_dir)
-                    mna_db.persist()
+                    db = Chroma.from_documents(split_texts, embeddings, persist_directory=temp_dir)
+                    db.persist()
                 except Exception as e:
                     st.error(f"Error initializing Chroma: {e}")
                     st.stop()
@@ -126,15 +132,9 @@ if st.button("Analyze"):
             tools = [
                 Tool(
                     args_schema=DocumentInput,
-                    name="Risk Factors Tool",
-                    description="Useful for answering questions about the risk factors section",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=risk_db.as_retriever()),
-                ),
-                Tool(
-                    args_schema=DocumentInput,
-                    name="MDA Tool",
-                    description="Useful for answering questions about the MDA section",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=mna_db.as_retriever()),
+                    name="Document Tool",
+                    description="Useful for answering questions about the document",
+                    func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
                 )
             ]
 
