@@ -36,7 +36,7 @@ if st.button("Analyze"):
         dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
 
         # Download all 10-K filings for the ticker from 2023 onward
-        dl.get("10-K", ticker, after="1994-12-31", before="2024-01-01")
+        dl.get("10-K", ticker, after="2021-12-31", before="2024-01-01")
 
         # Directory where filings are downloaded
         download_dir = os.path.join(".", "sec-edgar-filings", ticker, "10-K")
