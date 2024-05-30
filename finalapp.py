@@ -9,10 +9,10 @@ import openai
 
 # Function to download 10-K filings
 @st.cache_data
-def download_10k_filings(ticker, email_address):
+def download_10k_filings(ticker, emailaddress, download_path):
     download_path = f"/tmp/{ticker}_10k"  # Temporary path for download
     os.makedirs(download_path, exist_ok=True)
-    dl = Downloader(email_address)
+    dl = Downloader(ticker, emailaddress, download_path)
     try:
         print(f"Downloading 10-K for {ticker}")
         dl.get("10-K", ticker, after="1995-12-31", before="2023-01-01")
