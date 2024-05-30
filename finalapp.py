@@ -12,8 +12,9 @@ from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.llms import OpenAI
 from langchain.chains import RetrievalQA
-from langchain.schema import Document
+from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
+from langchain.schema import Document
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
