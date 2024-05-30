@@ -6,7 +6,7 @@ import streamlit as st
 import os
 import tempfile
 from sec_edgar_downloader import Downloader
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, FeatureNotFound
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
@@ -54,18 +54,25 @@ if st.button("Analyze"):
 
         # Function to extract risk factors section
         def extract_risk_factors(filepath):
-            with open(filepath, 'r', encoding='utf-8') as file:
-                soup = BeautifulSoup(file, 'html.parser')
-                risk_factors_section = ""
-                risk_factors = False
-                for line in soup.get_text().splitlines():
-                    if "Item 1A." in line:
-                        risk_factors = True
-                    if risk_factors:
-                        risk_factors_section += line + "\n"
-                        if "Item 1B." in line:
-                            break
-                return risk_factors_section
+            try:
+                with open(filepath, 'r', encoding='utf-8') as file:
+                    soup = BeautifulSoup(file, 'lxml')
+                    risk_factors_section = ""
+                    risk_factors = False
+                    for line in soup.get_text().splitlines():
+                        if "Item 1A." in line:
+                            risk_factors = True
+                        if risk_factors:
+                            risk_factors_section += line + "\n"
+                            if "Item 1B." in line:
+                                break
+                    return risk_factors_section
+            except FeatureNotFound:
+                st.error("lxml parser not found. Please ensure it is installed.")
+                st.stop()
+            except Exception as e:
+                st.error(f"Error processing file {filepath}: {e}")
+                return ""
 
         # Iterate over downloaded filings directories and extract "Risk Factors"
         for root, dirs, files in os.walk(download_dir):
