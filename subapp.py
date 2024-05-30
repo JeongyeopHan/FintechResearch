@@ -152,7 +152,7 @@ if st.button("Analyze"):
 
             # Define the questions
             risk_question = f"Identify five major risks identified by {ticker} in its 10-K filings. In English."
-            mdna_question = f"Perform a sentiment analysis of the discussions on revenue, expenses, and profitability in the MD&A sections of the 10-K filings for {ticker}."
+            mdna_question = "What are the key strategic initiatives outlined by the company for future growth, and how does the company plan to address any identified risks or challenges in the coming fiscal year?"
 
             # Get answers from the agents
             risk_response = risk_agent({"input": risk_question})
