@@ -68,11 +68,25 @@ if st.button("Analyze"):
                         return text[start:].strip()  # In case the end section is not found
                     return ""
             except FeatureNotFound:
-                st.error("lxml parser not found. Please ensure it is installed.")
+                st.error("html.parser not found. Please ensure it is installed.")
                 st.stop()
             except Exception as e:
                 st.error(f"Error processing file {filepath}: {e}")
                 return ""
+
+        # Function to try multiple variations of section titles
+        def find_section(filepath, section_titles, next_section_titles):
+            for section_title in section_titles:
+                for next_section_title in next_section_titles:
+                    section_text = extract_section(filepath, section_title, next_section_title)
+                    if section_text:
+                        return section_text
+            return ""
+
+        # Define variations of section titles to search for
+        risk_factors_titles = ["Item 1A. Risk Factors", "ITEM 1A. RISK FACTORS"]
+        mda_titles = ["Item 7. Management's Discussion and Analysis", "Item 7. Management’s Discussion and Analysis", "Item 7. MD&A"]
+        next_titles = ["Item 1B.", "Item 8.", "Item 7A."]
 
         # Iterate over downloaded filings directories and extract "Risk Factors" and "Management's Discussion and Analysis"
         for root, dirs, files in os.walk(download_dir):
@@ -84,8 +98,8 @@ if st.button("Analyze"):
                     if file == "full-submission.txt":
                         filepath = os.path.join(subdir_path, file)
                         st.write(f"Processing file: {filepath}")
-                        risk_factors_text = extract_section(filepath, "Item 1A. Risk Factors", "Item 1B.")
-                        mda_text = extract_section(filepath, "Item 7. Management's Discussion and Analysis", "Item 7A.")
+                        risk_factors_text = find_section(filepath, risk_factors_titles, next_titles)
+                        mda_text = find_section(filepath, mda_titles, next_titles)
                         if risk_factors_text:
                             st.write(f"Extracted Risk Factors from {filepath}")
                             filings.append(Document(page_content=risk_factors_text, metadata={"source": filepath}))
