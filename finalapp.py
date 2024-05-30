@@ -16,6 +16,7 @@ from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 from langchain.schema import Document
 import matplotlib.pyplot as plt
+import pandas as pd
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -33,6 +34,8 @@ llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
 st.title("SEC Filings Analysis with ChatGPT")
 
 ticker = st.text_input("Enter the company ticker:")
+analysis_type = st.selectbox("Select Analysis Type", ["Risk Factors", "M&A Sentiment"])
+
 if st.button("Analyze"):
     if ticker:
         filings = []
@@ -41,7 +44,7 @@ if st.button("Analyze"):
         dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
 
         # Download all 10-K filings for the ticker from 2023 onward
-        dl.get("10-K", ticker, after="2021-12-31", before="2024-01-01")
+        dl.get("10-K", ticker, after="2023-01-01", before="2023-12-31")
 
         # Directory where filings are downloaded
         download_dir = os.path.join(".", "sec-edgar-filings", ticker, "10-K")
@@ -53,21 +56,21 @@ if st.button("Analyze"):
 
         st.write(f"Checking directory: {download_dir}")
 
-        # Function to extract M&A section
-        def extract_ma_section(filepath):
+        # Function to extract risk factors or M&A section
+        def extract_section(filepath, section_title, next_section_titles):
             try:
                 with open(filepath, 'r', encoding='utf-8') as file:
                     soup = BeautifulSoup(file, 'lxml')
-                    ma_section = ""
-                    ma_found = False
+                    section_text = ""
+                    section_found = False
                     for line in soup.get_text().splitlines():
-                        if "Mergers and Acquisitions" in line:
-                            ma_found = True
-                        if ma_found:
-                            ma_section += line + "\n"
-                            if "Item 2." in line:
+                        if section_title in line:
+                            section_found = True
+                        if section_found:
+                            section_text += line + "\n"
+                            if any(next_title in line for next_title in next_section_titles):
                                 break
-                    return ma_section
+                    return section_text
             except FeatureNotFound:
                 st.error("lxml parser not found. Please ensure it is installed.")
                 st.stop()
@@ -75,7 +78,14 @@ if st.button("Analyze"):
                 st.error(f"Error processing file {filepath}: {e}")
                 return ""
 
-        # Iterate over downloaded filings directories and extract M&A section
+        # Extract the specified section from filings
+        if analysis_type == "Risk Factors":
+            section_title = "Item 1A."
+            next_section_titles = ["Item 1B."]
+        else:
+            section_title = "Mergers and Acquisitions"
+            next_section_titles = ["Item 7.", "Item 7A.", "Item 8."]
+
         for root, dirs, files in os.walk(download_dir):
             for subdir in dirs:
                 subdir_path = os.path.join(root, subdir)
@@ -85,65 +95,60 @@ if st.button("Analyze"):
                     if file == "full-submission.txt":
                         filepath = os.path.join(subdir_path, file)
                         st.write(f"Processing file: {filepath}")
-                        section_text = extract_ma_section(filepath)
+                        section_text = extract_section(filepath, section_title, next_section_titles)
                         if section_text:
                             filings.append(Document(page_content=section_text, metadata={"source": filepath}))
 
         if filings:
-            st.write(f"Found {len(filings)} filings with M&A sections.")
-            
-            # Process filings with Langchain
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-            split_texts = text_splitter.split_documents(filings)
+            st.write(f"Found {len(filings)} filings with {analysis_type.lower()} section.")
 
-            embeddings = OpenAIEmbeddings()
-            
-            # Use a temporary directory for Chroma persistence
-            with tempfile.TemporaryDirectory() as temp_dir:
-                try:
-                    db = Chroma.from_documents(split_texts, embeddings, persist_directory=temp_dir)
-                    db.persist()
-                except Exception as e:
-                    st.error(f"Error initializing Chroma: {e}")
-                    st.stop()
+            sentiment_data = []
 
-            class DocumentInput(BaseModel):
-                question: str = Field()
+            for doc in filings:
+                year = doc.metadata['source'].split('/')[-2].split('-')[1]  # Extract year from the directory name
+                sentiment_prompt = f"""
+                You are provided with a section of text from an SEC filing.
+                Analyze the sentiment of the text. Provide the sentiment analysis result for the year {year}, including the overall sentiment score, the number of positive words, and the number of negative words.
 
-            tools = [
-                Tool(
-                    args_schema=DocumentInput,
-                    name="Document Tool",
-                    description="Useful for answering questions about the document",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
-                )
-            ]
+                Text to analyze:
+                {doc.page_content}
+                """
+                response = llm(sentiment_prompt).content
+                st.write(f"Sentiment Analysis for document {doc.metadata['source']}:")
+                st.write(response)
+                
+                # Extract sentiment analysis results from the response
+                # Assuming the response is formatted in a way we can parse it
+                overall_score = ...  # Extract overall sentiment score from the response
+                positive_words = ...  # Extract number of positive words from the response
+                negative_words = ...  # Extract number of negative words from the response
 
-            agent = initialize_agent(agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, tools=tools, llm=llm, verbose=True)
+                sentiment_data.append({
+                    'Year': year,
+                    'Overall_Score': overall_score,
+                    'Positive_Words': positive_words,
+                    'Negative_Words': negative_words
+                })
 
-            # Define the sentiment analysis question
-            question = f"Analyze the sentiment of the M&A text. Provide the sentiment analysis result for the year 2023, including the overall sentiment score, the number of positive words, and the number of negative words."
+            sentiment_df = pd.DataFrame(sentiment_data)
 
-            # Get answer from the agent
-            response = agent({"input": question})
-            st.write(response["output"])
+            # Plot sentiment analysis results
+            fig, ax = plt.subplots(2, 1, figsize=(10, 8))
 
-            # Plotting sentiment results
-            sentiment_data = response["output"].split("\n")
-            positive_words = int([line for line in sentiment_data if "number of positive words" in line][0].split(":")[1].strip())
-            negative_words = int([line for line in sentiment_data if "number of negative words" in line][0].split(":")[1].strip())
+            # Plot for all years
+            sentiment_df.plot(kind='bar', x='Year', y=['Positive_Words', 'Negative_Words'], ax=ax[0])
+            ax[0].set_title('Sentiment Analysis for All Years')
+            ax[0].set_ylabel('Word Count')
 
-            labels = ['Positive Words', 'Negative Words']
-            values = [positive_words, negative_words]
-
-            fig, ax = plt.subplots()
-            ax.bar(labels, values, color=['green', 'red'])
-            ax.set_xlabel('Sentiment')
-            ax.set_ylabel('Number of Words')
-            ax.set_title('Sentiment Analysis of M&A Section for 2023')
+            # Plot for 2023-2024
+            sentiment_df_2023_2024 = sentiment_df[sentiment_df['Year'].isin(['2023', '2024'])]
+            sentiment_df_2023_2024.plot(kind='bar', x='Year', y=['Positive_Words', 'Negative_Words'], ax=ax[1])
+            ax[1].set_title('Sentiment Analysis for 2023-2024')
+            ax[1].set_ylabel('Word Count')
 
             st.pyplot(fig)
+
         else:
-            st.write("No filings found for the given ticker.")
+            st.write(f"No filings found with the specified {analysis_type.lower()} section for the given ticker.")
     else:
         st.write("Please enter a ticker symbol.")
