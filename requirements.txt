@@ -5,3 +5,4 @@ langchain-community==0.0.3
 openai
 pydantic
 requests
+lxml
