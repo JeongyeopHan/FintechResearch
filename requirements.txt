@@ -10,5 +10,5 @@ streamlit==1.28.1
 chromadb==0.4.12  # A known stable version
 pysqlite3-binary
 tiktoken
-pandas==1.4.2
-matplotlib==3.5.1
+pandas
+matplotlib
