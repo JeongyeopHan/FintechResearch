@@ -18,6 +18,10 @@ default_name = "JHON"
 default_email = "jhondoe@gmail.com"
 default_path = "."
 
+# Display the current working directory
+current_directory = os.getcwd()
+st.write(f"Current working directory: {current_directory}")
+
 # Download button
 if st.button("Download 10-K Filings"):
     if ticker:
