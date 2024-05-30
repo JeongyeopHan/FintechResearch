@@ -9,6 +9,7 @@ from langchain.llms import OpenAI
 from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
+from langchain.schema import Document
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -34,7 +35,7 @@ if st.button("Analyze"):
         dl = Downloader("JHON", "jhondoe@gmail.com", ".")
 
         # Download all 10-K filings for the ticker from 1995 to 2023
-        dl.get("10-K", ticker, after="1995-01-01", before="2023-12-31")
+        dl.get("10-K", ticker, after="2023-01-01", before="2023-12-31")
 
         # Directory where filings are downloaded
         download_dir = os.path.join(".", "sec-edgar-filings", ticker, "10-K")
@@ -73,15 +74,14 @@ if st.button("Analyze"):
                         st.write(f"Processing file: {filepath}")
                         section_text = extract_risk_factors(filepath)
                         if section_text:
-                            filings.append({"text": section_text})
+                            filings.append(Document(page_content=section_text, metadata={"source": filepath}))
 
         if filings:
             st.write(f"Found {len(filings)} filings with risk factors.")
             
             # Process filings with Langchain
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-            texts = [doc["text"] for doc in filings]
-            split_texts = text_splitter.split_documents(texts)
+            split_texts = text_splitter.split_documents(filings)
 
             embeddings = OpenAIEmbeddings()
             db = Chroma.from_documents(split_texts, embeddings, persist_directory="path/to/persist")
