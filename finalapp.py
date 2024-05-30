@@ -58,17 +58,13 @@ if st.button("Analyze"):
         def extract_section(filepath, section_title, next_section_title):
             try:
                 with open(filepath, 'r', encoding='utf-8') as file:
-                    soup = BeautifulSoup(file, 'lxml')
-                    section_text = ""
-                    section_started = False
-                    for line in soup.get_text().splitlines():
-                        if section_title in line:
-                            section_started = True
-                        if section_started:
-                            section_text += line + "\n"
-                            if next_section_title in line:
-                                break
-                    return section_text.strip()
+                    soup = BeautifulSoup(file, 'html.parser')
+                    text = soup.get_text()
+                    start = text.find(section_title)
+                    end = text.find(next_section_title, start)
+                    if start != -1 and end != -1:
+                        return text[start:end].strip()
+                    return ""
             except FeatureNotFound:
                 st.error("lxml parser not found. Please ensure it is installed.")
                 st.stop()
