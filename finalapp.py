@@ -15,7 +15,7 @@ from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 from langchain.schema import Document
-from transformers import pipeline
+from transformers import pipeline, Pipeline
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -39,7 +39,7 @@ if st.button("Analyze"):
         mna_filings = []
 
         # Initialize Downloader
-        dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
+        dl = Downloader()
 
         # Download all 10-K filings for the ticker from 2018 onward
         dl.get("10-K", ticker, after="2018-11-01", before="2023-12-31")
@@ -153,7 +153,11 @@ if st.button("Analyze"):
                 responses.append(response["output"])
 
             # Initialize sentiment analysis pipeline
-            sentiment_pipeline = pipeline("sentiment-analysis")
+            try:
+                sentiment_pipeline = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+            except Exception as e:
+                st.error(f"Error initializing sentiment analysis model: {e}")
+                st.stop()
 
             # Perform sentiment analysis on the MDA sections
             positive_count_total = 0
