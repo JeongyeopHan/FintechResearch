@@ -12,3 +12,4 @@ pysqlite3-binary
 tiktoken
 pandas
 matplotlib
+textblob
