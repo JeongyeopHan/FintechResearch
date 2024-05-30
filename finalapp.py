@@ -34,12 +34,13 @@ st.title("SEC Filings Analysis with ChatGPT")
 ticker = st.text_input("Enter the company ticker:")
 if st.button("Analyze"):
     if ticker:
-        filings = []
+        risk_filings = []
+        mda_filings = []
 
         # Initialize Downloader
         dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
 
-        # Download all 10-K filings for the ticker from 2023 onward
+        # Download all 10-K filings for the ticker from 2018 onward
         dl.get("10-K", ticker, after="2018-11-01", before="2023-12-31")
 
         # Directory where filings are downloaded
@@ -52,21 +53,21 @@ if st.button("Analyze"):
 
         st.write(f"Checking directory: {download_dir}")
 
-        # Function to extract risk factors section
-        def extract_risk_factors(filepath):
+        # Function to extract sections from filings
+        def extract_section(filepath, start_marker, end_marker):
             try:
                 with open(filepath, 'r', encoding='utf-8') as file:
                     soup = BeautifulSoup(file, 'lxml')
-                    risk_factors_section = ""
-                    risk_factors = False
+                    section_text = ""
+                    in_section = False
                     for line in soup.get_text().splitlines():
-                        if "Item 1A." in line:
-                            risk_factors = True
-                        if risk_factors:
-                            risk_factors_section += line + "\n"
-                            if "Item 1B." in line:
+                        if start_marker in line:
+                            in_section = True
+                        if in_section:
+                            section_text += line + "\n"
+                            if end_marker in line:
                                 break
-                    return risk_factors_section
+                    return section_text
             except FeatureNotFound:
                 st.error("lxml parser not found. Please ensure it is installed.")
                 st.stop()
@@ -74,7 +75,7 @@ if st.button("Analyze"):
                 st.error(f"Error processing file {filepath}: {e}")
                 return ""
 
-        # Iterate over downloaded filings directories and extract "Risk Factors"
+        # Iterate over downloaded filings directories and extract sections
         for root, dirs, files in os.walk(download_dir):
             for subdir in dirs:
                 subdir_path = os.path.join(root, subdir)
@@ -84,24 +85,37 @@ if st.button("Analyze"):
                     if file == "full-submission.txt":
                         filepath = os.path.join(subdir_path, file)
                         st.write(f"Processing file: {filepath}")
-                        section_text = extract_risk_factors(filepath)
-                        if section_text:
-                            filings.append(Document(page_content=section_text, metadata={"source": filepath}))
+                        risk_section_text = extract_section(filepath, "Item 1A.", "Item 1B.")
+                        mda_section_text = extract_section(filepath, "Item 7.", "Item 7A.")
+                        if risk_section_text:
+                            risk_filings.append(Document(page_content=risk_section_text, metadata={"source": filepath}))
+                        if mda_section_text:
+                            mda_filings.append(Document(page_content=mda_section_text, metadata={"source": filepath}))
 
-        if filings:
-            st.write(f"Found {len(filings)} filings with risk factors.")
-            
-            # Process filings with Langchain
+        if risk_filings:
+            st.write(f"Found {len(risk_filings)} filings with risk factors.")
+        else:
+            st.write("No risk factors found for the given ticker.")
+
+        if mda_filings:
+            st.write(f"Found {len(mda_filings)} filings with MD&A sections.")
+        else:
+            st.write("No MD&A sections found for the given ticker.")
+
+        if risk_filings or mda_filings:
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-            split_texts = text_splitter.split_documents(filings)
+            risk_texts = text_splitter.split_documents(risk_filings)
+            mda_texts = text_splitter.split_documents(mda_filings)
 
             embeddings = OpenAIEmbeddings()
             
             # Use a temporary directory for Chroma persistence
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    db = Chroma.from_documents(split_texts, embeddings, persist_directory=temp_dir)
-                    db.persist()
+                    risk_db = Chroma.from_documents(risk_texts, embeddings, persist_directory=os.path.join(temp_dir, "risk"))
+                    risk_db.persist()
+                    mda_db = Chroma.from_documents(mda_texts, embeddings, persist_directory=os.path.join(temp_dir, "mda"))
+                    mda_db.persist()
                 except Exception as e:
                     st.error(f"Error initializing Chroma: {e}")
                     st.stop()
@@ -109,23 +123,42 @@ if st.button("Analyze"):
             class DocumentInput(BaseModel):
                 question: str = Field()
 
-            tools = [
-                Tool(
-                    args_schema=DocumentInput,
-                    name="Document Tool",
-                    description="Useful for answering questions about the document",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
-                )
-            ]
+            risk_tool = Tool(
+                args_schema=DocumentInput,
+                name="Risk Factors Tool",
+                description="Useful for answering questions about the risk factors in the document",
+                func=RetrievalQA.from_chain_type(llm=llm, retriever=risk_db.as_retriever()),
+            )
 
-            agent = initialize_agent(agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, tools=tools, llm=llm, verbose=True)
+            mda_tool = Tool(
+                args_schema=DocumentInput,
+                name="MD&A Tool",
+                description="Useful for answering questions about the MD&A sections in the document",
+                func=RetrievalQA.from_chain_type(llm=llm, retriever=mda_db.as_retriever()),
+            )
 
-            # Define the question
-            question = f"Summarize the main risks identified by {ticker} in its 10-K filings. In English."
-            
-            # Get answer from the agent
-            response = agent({"input": question})
-            st.write(response["output"])
+            risk_agent = initialize_agent(agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, tools=[risk_tool], llm=llm, verbose=True)
+            mda_agent = initialize_agent(agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, tools=[mda_tool], llm=llm, verbose=True)
+
+            # Define the questions
+            risk_question = f"Summarize the main risks identified by {ticker} in its 10-K filings. In English."
+            mda_insight_question = f"Provide an overview of the financial performance and key insights from the MD&A sections of {ticker}'s 10-K filings."
+
+            # Get answers from the agent
+            try:
+                risk_response = risk_agent({"input": risk_question})
+                st.write("Main Risks Identified:")
+                st.write(risk_response["output"])
+            except Exception as e:
+                st.error(f"Error processing risk factors question: {e}")
+
+            try:
+                mda_insight_response = mda_agent({"input": mda_insight_question})
+                st.write("MD&A Insights:")
+                st.write(mda_insight_response["output"])
+            except Exception as e:
+                st.error(f"Error processing MD&A insights question: {e}")
+
         else:
             st.write("No filings found for the given ticker.")
     else:
