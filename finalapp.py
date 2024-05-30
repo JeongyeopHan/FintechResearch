@@ -41,7 +41,7 @@ if st.button("Analyze"):
         # Initialize Downloader
         dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
 
-        # Download all 10-K filings for the ticker from 2023 onward
+        # Download all 10-K filings for the ticker from 2018 onward
         dl.get("10-K", ticker, after="2018-11-01", before="2023-12-31")
 
         # Directory where filings are downloaded
@@ -55,7 +55,7 @@ if st.button("Analyze"):
         st.write(f"Checking directory: {download_dir}")
 
         # Function to extract specific sections
-        def extract_section(filepath, section_title):
+        def extract_section(filepath, section_title, next_section_title):
             try:
                 with open(filepath, 'r', encoding='utf-8') as file:
                     soup = BeautifulSoup(file, 'lxml')
@@ -66,9 +66,9 @@ if st.button("Analyze"):
                             section_started = True
                         if section_started:
                             section_text += line + "\n"
-                            if "Item " in line and line != section_title:
+                            if next_section_title in line:
                                 break
-                    return section_text
+                    return section_text.strip()
             except FeatureNotFound:
                 st.error("lxml parser not found. Please ensure it is installed.")
                 st.stop()
@@ -86,8 +86,8 @@ if st.button("Analyze"):
                     if file == "full-submission.txt":
                         filepath = os.path.join(subdir_path, file)
                         st.write(f"Processing file: {filepath}")
-                        risk_factors_text = extract_section(filepath, "Item 1A. Risk Factors")
-                        mda_text = extract_section(filepath, "Item 7. Management's Discussion and Analysis")
+                        risk_factors_text = extract_section(filepath, "Item 1A. Risk Factors", "Item 1B.")
+                        mda_text = extract_section(filepath, "Item 7. Management's Discussion and Analysis", "Item 7A.")
                         if risk_factors_text:
                             filings.append(Document(page_content=risk_factors_text, metadata={"source": filepath}))
                         if mda_text:
