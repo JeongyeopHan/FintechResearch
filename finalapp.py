@@ -5,28 +5,95 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import streamlit as st
 import os
 import tempfile
-from sec_edgar_downloader import Downloader
+import logging
 from bs4 import BeautifulSoup, FeatureNotFound
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from sec_edgar_downloader import Downloader
+from langchain.text_splitter import CharacterTextSplitter, RecursiveCharacterTextSplitter
+from langchain.document_loaders import TextLoader
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
-from langchain.llms import OpenAI
+from langchain.llms import ChatOpenAI, OpenAI
 from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 from langchain.schema import Document
+from tenacity import retry, wait_exponential, stop_after_attempt
+from langchain.prompts import PromptTemplate
 
-# Get API keys from environment variables
-openai_api_key = os.getenv("OPENAI_API_KEY")
+# Ensure the correct sqlite library is used
+__import__('pysqlite3')
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
-# Ensure the API keys are not None
-if not openai_api_key:
-    st.error("API keys are not set properly. Please check your environment variables.")
-    st.stop()
+# Constants
+SOURCE_DIRECTORY = "./sec-edgar-filings"
+PERSIST_DIRECTORY = "./persist"
 
-# Initialize OpenAI API
-os.environ["OPENAI_API_KEY"] = openai_api_key
-llm = OpenAI(temperature=0)
+# Define prompt template
+prompt_template = """Your name is Bob and you are a human not an AI assistant. These are risk factors section of SEC 10-K annual filings by companies. Sometimes referred as 10-K SEC filings. If they ask about SEC or 10-K filings it is referred to the risk factor section what we have. Use the following risk factor sections of 10-K filings from various company filings to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer.
+
+{context}
+
+Question: {question}
+Helpful Answer:"""
+
+PROMPT = PromptTemplate(
+    template=prompt_template, input_variables=["context", "question"]
+)
+chain_type_kwargs = {"prompt": PROMPT}
+
+# Define DocumentInput class
+class DocumentInput(BaseModel):
+    question: str = Field()
+
+# Function to create database from documents
+def create_DB():
+    logging.info(f"Loading documents from {SOURCE_DIRECTORY}")
+    files = os.listdir(SOURCE_DIRECTORY)
+    print(files)
+    for file in files:
+        file_name = file.split('.')[0]
+        print(file_name)
+        file_path = os.path.join(SOURCE_DIRECTORY, file)
+        print("File path: ", file_path)
+        loader = TextLoader(file_path)
+        pages = loader.load_and_split()
+        text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+        docs = text_splitter.split_documents(pages)
+        embeddings = OpenAIEmbeddings()
+        db = Chroma.from_documents(docs, embeddings, persist_directory=f"{PERSIST_DIRECTORY}/{file}")
+    return ""
+
+# Function to create tools for each retriever
+def create_tools():
+    files = os.listdir(SOURCE_DIRECTORY)
+    llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
+    tools = []
+    embeddings = OpenAIEmbeddings()
+    for file in files:
+        file_name = file.split('.')[0]
+        db = Chroma(persist_directory=f"{PERSIST_DIRECTORY}/{file}", embedding_function=embeddings)
+        retrievers = db.as_retriever()
+        tools.append(
+            Tool(
+                args_schema=DocumentInput,
+                name=file_name,
+                description=f"useful when you want to answer questions about {file_name}",
+                func=RetrievalQA.from_chain_type(llm=llm, retriever=retrievers, chain_type_kwargs=chain_type_kwargs),
+            )
+        )
+    return tools
+
+# Function to load agents
+def load_agents(tools):
+    llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
+    langchain.debug = True
+    agent = initialize_agent(
+        agent=AgentType.OPENAI_FUNCTIONS,
+        tools=tools,
+        llm=llm,
+        verbose=True,
+    )
+    return agent
 
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
@@ -37,13 +104,13 @@ if st.button("Analyze"):
         filings = []
 
         # Initialize Downloader
-        dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
+        dl = Downloader("JHON", "jhondoe@gmail.com", ".")
 
         # Download all 10-K filings for the ticker from 2023 onward
         dl.get("10-K", ticker, after="2023-11-01", before="2023-12-31")
 
         # Directory where filings are downloaded
-        download_dir = os.path.join(".", "sec-edgar-filings", ticker, "10-K")
+        download_dir = os.path.join(SOURCE_DIRECTORY, ticker, "10-K")
 
         # Ensure the download directory exists
         if not os.path.exists(download_dir):
@@ -91,34 +158,20 @@ if st.button("Analyze"):
         if filings:
             st.write(f"Found {len(filings)} filings with risk factors.")
             
-            # Process filings with Langchain
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-            split_texts = text_splitter.split_documents(filings)
-
-            embeddings = OpenAIEmbeddings()
+            # Save risk factors to text files
+            os.makedirs(SOURCE_DIRECTORY, exist_ok=True)
+            for i, filing in enumerate(filings):
+                with open(os.path.join(SOURCE_DIRECTORY, f"filing_{i}.txt"), "w") as f:
+                    f.write(filing.page_content)
             
-            # Use a temporary directory for Chroma persistence
-            with tempfile.TemporaryDirectory() as temp_dir:
-                try:
-                    db = Chroma.from_documents(split_texts, embeddings, persist_directory=temp_dir)
-                    db.persist()
-                except Exception as e:
-                    st.error(f"Error initializing Chroma: {e}")
-                    st.stop()
+            # Create DB from the downloaded documents
+            create_DB()
 
-            class DocumentInput(BaseModel):
-                question: str = Field()
+            # Create tools for each retriever
+            tools = create_tools()
 
-            tools = [
-                Tool(
-                    args_schema=DocumentInput,
-                    name="Document Tool",
-                    description="Useful for answering questions about the document",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
-                )
-            ]
-
-            agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=tools, llm=llm, verbose=True)
+            # Load agent with the created tools
+            agent = load_agents(tools)
 
             # Define the question
             question = f"Summarize the main risks identified by {ticker} in its 10-K filings. In English."
