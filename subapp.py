@@ -118,7 +118,7 @@ if st.button("Analyze"):
                 )
             ]
 
-            agent = initialize_agent(agent=AgentType.AgentType.OPENAI_FUNCTIONS, tools=tools, llm=llm, verbose=True)
+            agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=tools, llm=llm, verbose=True)
 
             # Define the question
             question = f"Identify major risks identified by {ticker} in its 10-K filings. In English."
