@@ -37,7 +37,7 @@ if st.button("Analyze"):
         filings = []
 
         # Initialize Downloader
-        dl = Downloader("JHON", "jhondoe@gmail.com", ".")
+        dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
 
         # Download all 10-K filings for the ticker from 2023 onward
         dl.get("10-K", ticker, after="2023-11-01", before="2023-12-31")
