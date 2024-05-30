@@ -1,7 +1,5 @@
-os
-json
-sec-edgar-downloader==4.0.1
-sec-api==1.0.0
-langchain==0.0.146
-openai==0.27.0
-streamlit==1.15.2
+streamlit
+sec-api
+langchain
+openai
+pydantic
