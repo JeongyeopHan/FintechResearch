@@ -14,8 +14,8 @@ st.title("Download SEC 10-K Filings")
 ticker = st.text_input("Enter the company ticker (e.g., MSFT):")
 
 # Default values
-default_name = "JHON"
-default_email = "jhondoe@gmail.com"
+default_name = "Jeong"
+default_email = "20150613rke3@gmail.com"
 default_path = "."
 
 # Display the current working directory
