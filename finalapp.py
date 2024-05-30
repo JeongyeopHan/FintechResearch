@@ -2,11 +2,11 @@ import streamlit as st
 import os
 from sec_api import ExtractorApi, XbrlApi
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings
+from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.llms import OpenAI
-from langchain.agents import initialize_agent, AgentType
-from langchain.tools import RetrievalQA, Tool
+from langchain.chains import RetrievalQA
+from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 
 # Get API keys from environment variables
@@ -60,7 +60,7 @@ if st.button("Analyze"):
                     args_schema=DocumentInput,
                     name="Document Tool",
                     description="Useful for answering questions about the document",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=db),
+                    func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
                 )
             ]
 
