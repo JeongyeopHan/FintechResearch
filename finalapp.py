@@ -68,7 +68,7 @@ if st.button("Analyze"):
                 st.write(f"Checking subdir: {subdir_path}")
                 for file in os.listdir(subdir_path):
                     st.write(f"Found file: {file}")
-                    if file.endswith(".html"):
+                    if file == "full-submission.txt":
                         filepath = os.path.join(subdir_path, file)
                         st.write(f"Processing file: {filepath}")
                         section_text = extract_risk_factors(filepath)
