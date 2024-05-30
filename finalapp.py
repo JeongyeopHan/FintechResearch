@@ -26,7 +26,7 @@ if not openai_api_key:
 
 # Initialize OpenAI API
 os.environ["OPENAI_API_KEY"] = openai_api_key
-llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
+llm = ChatOpenAI(temperature=0)
 
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
@@ -34,13 +34,14 @@ st.title("SEC Filings Analysis with ChatGPT")
 ticker = st.text_input("Enter the company ticker:")
 if st.button("Analyze"):
     if ticker:
-        filings = []
+        risk_filings = []
+        mna_filings = []
 
         # Initialize Downloader
-        dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
+        dl = Downloader("Jeong")
 
-        # Download all 10-K filings for the ticker from 2023 onward
-        dl.get("10-K", ticker, after="2018-11-01", before="2023-12-31")
+        # Download all 10-K filings for the ticker from 2018 onward
+        dl.get("10-K", ticker, after="2018-01-01", before="2023-12-31")
 
         # Directory where filings are downloaded
         download_dir = os.path.join(".", "sec-edgar-filings", ticker, "10-K")
@@ -52,21 +53,21 @@ if st.button("Analyze"):
 
         st.write(f"Checking directory: {download_dir}")
 
-        # Function to extract risk factors section
-        def extract_risk_factors(filepath):
+        # Function to extract sections
+        def extract_section(filepath, start_marker, end_marker):
             try:
                 with open(filepath, 'r', encoding='utf-8') as file:
                     soup = BeautifulSoup(file, 'lxml')
-                    risk_factors_section = ""
-                    risk_factors = False
+                    section_text = ""
+                    section_found = False
                     for line in soup.get_text().splitlines():
-                        if "Item 1A." in line:
-                            risk_factors = True
-                        if risk_factors:
-                            risk_factors_section += line + "\n"
-                            if "Item 1B." in line:
+                        if start_marker in line:
+                            section_found = True
+                        if section_found:
+                            section_text += line + "\n"
+                            if end_marker in line:
                                 break
-                    return risk_factors_section
+                    return section_text
             except FeatureNotFound:
                 st.error("lxml parser not found. Please ensure it is installed.")
                 st.stop()
@@ -74,7 +75,7 @@ if st.button("Analyze"):
                 st.error(f"Error processing file {filepath}: {e}")
                 return ""
 
-        # Iterate over downloaded filings directories and extract "Risk Factors"
+        # Iterate over downloaded filings directories and extract sections
         for root, dirs, files in os.walk(download_dir):
             for subdir in dirs:
                 subdir_path = os.path.join(root, subdir)
@@ -84,24 +85,37 @@ if st.button("Analyze"):
                     if file == "full-submission.txt":
                         filepath = os.path.join(subdir_path, file)
                         st.write(f"Processing file: {filepath}")
-                        section_text = extract_risk_factors(filepath)
-                        if section_text:
-                            filings.append(Document(page_content=section_text, metadata={"source": filepath}))
+                        risk_section_text = extract_section(filepath, "Item 1A.", "Item 1B.")
+                        mna_section_text = extract_section(filepath, "Item 7.", "Item 8.")
+                        if risk_section_text:
+                            risk_filings.append(Document(page_content=risk_section_text, metadata={"source": filepath}))
+                        if mna_section_text:
+                            mna_filings.append(Document(page_content=mna_section_text, metadata={"source": filepath}))
 
-        if filings:
-            st.write(f"Found {len(filings)} filings with risk factors.")
-            
-            # Process filings with Langchain
+        if risk_filings:
+            st.write(f"Found {len(risk_filings)} filings with risk factors.")
+        else:
+            st.write("No risk factors found for the given ticker.")
+
+        if mna_filings:
+            st.write(f"Found {len(mna_filings)} filings with MDA sections.")
+        else:
+            st.write("No MDA sections found for the given ticker.")
+
+        if risk_filings or mna_filings:
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-            split_texts = text_splitter.split_documents(filings)
+            risk_texts = text_splitter.split_documents(risk_filings)
+            mna_texts = text_splitter.split_documents(mna_filings)
 
             embeddings = OpenAIEmbeddings()
-            
+
             # Use a temporary directory for Chroma persistence
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    db = Chroma.from_documents(split_texts, embeddings, persist_directory=temp_dir)
-                    db.persist()
+                    risk_db = Chroma.from_documents(risk_texts, embeddings, persist_directory=temp_dir)
+                    risk_db.persist()
+                    mna_db = Chroma.from_documents(mna_texts, embeddings, persist_directory=temp_dir)
+                    mna_db.persist()
                 except Exception as e:
                     st.error(f"Error initializing Chroma: {e}")
                     st.stop()
@@ -112,21 +126,37 @@ if st.button("Analyze"):
             tools = [
                 Tool(
                     args_schema=DocumentInput,
-                    name="Document Tool",
-                    description="Useful for answering questions about the document",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
+                    name="Risk Factors Tool",
+                    description="Useful for answering questions about the risk factors section",
+                    func=RetrievalQA.from_chain_type(llm=llm, retriever=risk_db.as_retriever()),
+                ),
+                Tool(
+                    args_schema=DocumentInput,
+                    name="MDA Tool",
+                    description="Useful for answering questions about the MDA section",
+                    func=RetrievalQA.from_chain_type(llm=llm, retriever=mna_db.as_retriever()),
                 )
             ]
 
             agent = initialize_agent(agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, tools=tools, llm=llm, verbose=True)
 
-            # Define the question
-            question = f"Summarize the main risks identified by {ticker} in its 10-K filings. In English."
+            # Define the questions
+            questions = [
+                f"Summarize the main risks identified by {ticker} in its 10-K filings. In English.",
+                f"Summarize the Management's Discussion and Analysis (MDA) section for {ticker} in its 10-K filings. In English.",
+            ]
 
-            # Get answer from the agent
-            response = agent({"input": question})
-            st.write(response["output"])
+            responses = []
+            for question in questions:
+                response = agent({"input": question})
+                responses.append(response["output"])
+
+            # Display responses
+            st.write("Risk Factors Summary:")
+            st.write(responses[0])
+            st.write("MDA Summary:")
+            st.write(responses[1])
         else:
-            st.write("No filings found for the given ticker.")
+            st.write("No relevant sections found for the given ticker.")
     else:
         st.write("Please enter a ticker symbol.")
