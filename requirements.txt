@@ -1,5 +1,5 @@
 streamlit
-sec-api
+beautifulsoup4
 langchain==0.0.171
 langchain-community==0.0.3
 openai
