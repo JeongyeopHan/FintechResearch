@@ -12,8 +12,6 @@ from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.llms import OpenAI
 from langchain.chains import RetrievalQA
-from langchain.agents import initialize_agent, AgentType, Tool
-from pydantic import BaseModel, Field
 from langchain.schema import Document
 from collections import Counter
 
@@ -124,16 +122,13 @@ if st.button("Analyze"):
             class DocumentInput(BaseModel):
                 question: str = Field()
 
-            risk_tools = [
+            tools = [
                 Tool(
                     args_schema=DocumentInput,
                     name="Risk Factors Tool",
                     description="Useful for answering questions about the risk factors section",
                     func=RetrievalQA.from_chain_type(llm=llm, retriever=risk_db.as_retriever()),
-                )
-            ]
-
-            mna_tools = [
+                ),
                 Tool(
                     args_schema=DocumentInput,
                     name="MDA Tool",
@@ -142,20 +137,27 @@ if st.button("Analyze"):
                 )
             ]
 
-            risk_agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=risk_tools, llm=llm, verbose=True)
-            mna_agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=mna_tools, llm=llm, verbose=True)
+            agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=tools, llm=llm, verbose=True)
 
-            # Define the question for risk factors
-            risk_question = f"Summarize the main risks identified by {ticker} in its 10-K filings. In English."
-            risk_response = risk_agent({"input": risk_question})
+            # Define the questions
+            questions = [
+                f"Summarize the main risks identified by {ticker} in its 10-K filings. In English.",
+                f"Summarize the Management's Discussion and Analysis (MDA) section for {ticker} in its 10-K filings. In English.",
+                f"Count the positive and negative words for the years 2021, 2022, and 2023 in the MDA section."
+            ]
+
+            responses = []
+            for question in questions:
+                response = agent({"input": question})
+                responses.append(response["output"])
+
+            # Display responses
             st.write("Risk Factors Summary:")
-            st.write(risk_response["output"])
-
-            # Define the question for MDA section
-            mna_question = f"Summarize the Management's Discussion and Analysis (MDA) section for {ticker} in its 10-K filings. In English."
-            mna_response = mna_agent({"input": mna_question})
+            st.write(responses[0])
             st.write("MDA Summary:")
-            st.write(mna_response["output"])
+            st.write(responses[1])
+            st.write("Sentiment Analysis:")
+            st.write(responses[2])
 
             # Define positive and negative words for sentiment analysis
             positive_words = set(["good", "great", "positive", "beneficial", "advantageous", "successful", "favorable"])
