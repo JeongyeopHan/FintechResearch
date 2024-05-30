@@ -7,3 +7,4 @@ pydantic
 requests
 lxml
 sec_edgar_downloader
+chromadb
