@@ -1,5 +1,5 @@
 import streamlit as st
-from task1_download.py import download_filings
+from task1_download import download_filings
 from task2_analysis import extract_risk_factors, analyze_filings
 from langchain.schema import Document
 import os
