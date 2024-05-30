@@ -9,7 +9,7 @@ from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 
 from task1_download import download_filings
-from task2_analyze import analyze_filings
+from task2_analyze import analyze_filings, get_filings
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
