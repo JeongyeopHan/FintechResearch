@@ -34,7 +34,8 @@ st.title("SEC Filings Analysis with ChatGPT")
 ticker = st.text_input("Enter the company ticker:")
 if st.button("Analyze"):
     if ticker:
-        filings = []
+        risk_factor_filings = []
+        mdna_filings = []
 
         # Initialize Downloader
         dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
@@ -52,21 +53,21 @@ if st.button("Analyze"):
 
         st.write(f"Checking directory: {download_dir}")
 
-        # Function to extract risk factors section
-        def extract_risk_factors(filepath):
+        # Function to extract sections
+        def extract_section(filepath, start_marker, end_marker):
             try:
                 with open(filepath, 'r', encoding='utf-8') as file:
                     soup = BeautifulSoup(file, 'lxml')
-                    risk_factors_section = ""
-                    risk_factors = False
+                    section_text = ""
+                    in_section = False
                     for line in soup.get_text().splitlines():
-                        if "Item 1A." in line:
-                            risk_factors = True
-                        if risk_factors:
-                            risk_factors_section += line + "\n"
-                            if "Item 1B." in line:
+                        if start_marker in line:
+                            in_section = True
+                        if in_section:
+                            section_text += line + "\n"
+                            if end_marker in line:
                                 break
-                    return risk_factors_section
+                    return section_text
             except FeatureNotFound:
                 st.error("lxml parser not found. Please ensure it is installed.")
                 st.stop()
@@ -74,7 +75,7 @@ if st.button("Analyze"):
                 st.error(f"Error processing file {filepath}: {e}")
                 return ""
 
-        # Iterate over downloaded filings directories and extract "Risk Factors"
+        # Iterate over downloaded filings directories and extract sections
         for root, dirs, files in os.walk(download_dir):
             for subdir in dirs:
                 subdir_path = os.path.join(root, subdir)
@@ -84,48 +85,85 @@ if st.button("Analyze"):
                     if file == "full-submission.txt":
                         filepath = os.path.join(subdir_path, file)
                         st.write(f"Processing file: {filepath}")
-                        section_text = extract_risk_factors(filepath)
-                        if section_text:
-                            filings.append(Document(page_content=section_text, metadata={"source": filepath}))
 
-        if filings:
-            st.write(f"Found {len(filings)} filings with risk factors.")
-            
-            # Process filings with Langchain
+                        # Extract Risk Factors
+                        risk_factors_text = extract_section(filepath, "Item 1A.", "Item 1B.")
+                        if risk_factors_text:
+                            risk_factor_filings.append(Document(page_content=risk_factors_text, metadata={"source": filepath}))
+
+                        # Extract MD&A
+                        mdna_text = extract_section(filepath, "Item 7.", "Item 7A.")
+                        if mdna_text:
+                            mdna_filings.append(Document(page_content=mdna_text, metadata={"source": filepath}))
+
+        if risk_factor_filings and mdna_filings:
+            st.write(f"Found {len(risk_factor_filings)} filings with risk factors.")
+            st.write(f"Found {len(mdna_filings)} filings with MD&A sections.")
+
+            # Process risk factors with Langchain
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-            split_texts = text_splitter.split_documents(filings)
+            risk_split_texts = text_splitter.split_documents(risk_factor_filings)
 
             embeddings = OpenAIEmbeddings()
             
             # Use a temporary directory for Chroma persistence
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    db = Chroma.from_documents(split_texts, embeddings, persist_directory=temp_dir)
-                    db.persist()
+                    risk_db = Chroma.from_documents(risk_split_texts, embeddings, persist_directory=temp_dir)
+                    risk_db.persist()
                 except Exception as e:
-                    st.error(f"Error initializing Chroma: {e}")
+                    st.error(f"Error initializing Chroma for risk factors: {e}")
+                    st.stop()
+
+            # Process MD&A with Langchain
+            mdna_split_texts = text_splitter.split_documents(mdna_filings)
+            
+            with tempfile.TemporaryDirectory() as temp_dir:
+                try:
+                    mdna_db = Chroma.from_documents(mdna_split_texts, embeddings, persist_directory=temp_dir)
+                    mdna_db.persist()
+                except Exception as e:
+                    st.error(f"Error initializing Chroma for MD&A: {e}")
                     st.stop()
 
             class DocumentInput(BaseModel):
                 question: str = Field()
 
-            tools = [
+            risk_tools = [
                 Tool(
                     args_schema=DocumentInput,
-                    name="document_tool",  # Ensure the name matches the required pattern
-                    description="Useful for answering questions about the document",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
+                    name="risk_document_tool",  # Ensure the name matches the required pattern
+                    description="Useful for answering questions about risk factors in the document",
+                    func=RetrievalQA.from_chain_type(llm=llm, retriever=risk_db.as_retriever()),
                 )
             ]
 
-            agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=tools, llm=llm, verbose=True)
+            mdna_tools = [
+                Tool(
+                    args_schema=DocumentInput,
+                    name="mdna_document_tool",  # Ensure the name matches the required pattern
+                    description="Useful for answering questions about MD&A sections in the document",
+                    func=RetrievalQA.from_chain_type(llm=llm, retriever=mdna_db.as_retriever()),
+                )
+            ]
 
-            # Define the question
-            question = f"Identify five major risks identified by {ticker} in its 10-K filings. In English."
-            
-            # Get answer from the agent
-            response = agent({"input": question})
-            st.write(response["output"])
+            risk_agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=risk_tools, llm=llm, verbose=True)
+            mdna_agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=mdna_tools, llm=llm, verbose=True)
+
+            # Define the questions
+            risk_question = f"Identify five major risks identified by {ticker} in its 10-K filings. In English."
+            mdna_question = "Analyze the tone of the following MD&A sections and determine whether it is positive, negative, or neutral. Provide reasons for your analysis."
+
+            # Get answers from the agents
+            risk_response = risk_agent({"input": risk_question})
+            mdna_response = mdna_agent({"input": mdna_question})
+
+            st.write("Risk Factors Analysis:")
+            st.write(risk_response["output"])
+
+            st.write("MD&A Tone Analysis:")
+            st.write(mdna_response["output"])
+
         else:
             st.write("No filings found for the given ticker.")
     else:
