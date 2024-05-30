@@ -4,8 +4,8 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 import streamlit as st
 import os
-from download import download_filings
-from analyze import get_filings, analyze_filings
+from task1_download import download_filings
+from task2_analysis import get_filings, analyze_filings
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
