@@ -1,7 +1,7 @@
 import streamlit as st
 import os
-from edgar_crawler import EdgarCrawler
-from edgar_crawler.extract_items import ItemExtractor
+from sec_edgar_downloader import Downloader
+from bs4 import BeautifulSoup
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
@@ -30,37 +30,38 @@ if st.button("Analyze"):
     if ticker:
         filings = []
 
-        # Configure and initialize EdgarCrawler
-        crawler = EdgarCrawler(
-            user_agent="Jeong 20150613rke3@gmail.com",
-            start_year=1995,
-            end_year=2023,
-            filing_types=["10-K"],
-            cik_tickers=[ticker],
-            raw_filings_folder="RAW_FILINGS",
-            indices_folder="INDICES",
-            skip_present_indices=True,
-        )
+        # Initialize Downloader
+        dl = Downloader("Jeong", "20150613rke3@gmail.com")
 
-        # Download filings
-        crawler.run()
+        # Download all 10-K filings for the ticker from 1995 to 2023
+        dl.get("10-K", ticker, after="1995-01-01", before="2023-12-31")
 
-        # Configure and initialize ItemExtractor
-        extractor = ItemExtractor(
-            raw_filings_folder="RAW_FILINGS",
-            extracted_filings_folder="EXTRACTED_FILINGS",
-            items_to_extract=["1A"],
-            remove_tables=True,
-            skip_extracted_filings=True,
-        )
+        # Directory where filings are downloaded
+        download_dir = f"./sec-edgar-filings/{ticker}/10-K/"
 
-        # Extract items
-        extracted_items = extractor.run()
+        # Function to extract risk factors section
+        def extract_risk_factors(filepath):
+            with open(filepath, 'r') as file:
+                soup = BeautifulSoup(file, 'html.parser')
+                risk_factors_section = ""
+                risk_factors = False
+                for line in soup.get_text().splitlines():
+                    if "Item 1A." in line:
+                        risk_factors = True
+                    if risk_factors:
+                        risk_factors_section += line + "\n"
+                        if "Item 1B." in line:
+                            break
+                return risk_factors_section
 
-        # Process extracted filings
-        for item in extracted_items:
-            if "1A" in item:
-                filings.append({"text": item["1A"]})
+        # Iterate over downloaded filings and extract "Risk Factors"
+        for root, dirs, files in os.walk(download_dir):
+            for file in files:
+                if file.endswith(".html"):
+                    filepath = os.path.join(root, file)
+                    section_text = extract_risk_factors(filepath)
+                    if section_text:
+                        filings.append({"text": section_text})
 
         if filings:
             # Process filings with Langchain
