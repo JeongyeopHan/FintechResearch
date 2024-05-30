@@ -161,7 +161,7 @@ if st.button("Analyze"):
             st.write("Risk Factors Analysis:")
             st.write(risk_response["output"])
 
-            st.write("MD&A Tone Analysis:")
+            st.write("MD&A Analysis:")
             st.write(mdna_response["output"])
 
         else:
