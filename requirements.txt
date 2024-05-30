@@ -11,4 +11,3 @@ chromadb==0.4.12  # A known stable version
 pysqlite3-binary
 tiktoken
 plotly
-pandas
