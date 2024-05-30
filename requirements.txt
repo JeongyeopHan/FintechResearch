@@ -1,6 +1,6 @@
 streamlit
 sec-api
-langchain
-langchain-community
+langchain==0.0.171
+langchain-community==0.0.3
 openai
 pydantic
