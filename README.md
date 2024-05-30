@@ -1,8 +1,8 @@
-# SEC Filings Analysis with Langchain and Chatgpt deploying on Streamlit
+### SEC Filings Analysis with Langchain and Chatgpt deploying on Streamlit
 
 This project is part of a programming task to analyze SEC 10-K filings using LLM api. The project is divided into three main tasks: downloading the 10-K filings, analyzing the filings, and deploying a simple app to visualize the insights.
 
-#Used Tech Stack
+### Used Tech Stack
 1. Python
 2. langchain
 3. Streamlit
