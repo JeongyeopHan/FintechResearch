@@ -39,10 +39,17 @@ if st.button("Analyze"):
         # Directory where filings are downloaded
         download_dir = os.path.join(".", "sec-edgar-filings", ticker, "10-K")
 
-        # Ensure the download directory exists
-        if not os.path.exists(download_dir):
-            st.error(f"Download directory {download_dir} does not exist.")
-            st.stop()
+        # Debug: List files in the download directory
+        st.write(f"Checking directory: {download_dir}")
+        if os.path.exists(download_dir):
+            st.write(f"Directory exists: {download_dir}")
+            files = os.listdir(download_dir)
+            if files:
+                st.write(f"Files in directory: {files}")
+            else:
+                st.write("No files found in the directory.")
+        else:
+            st.write(f"Directory does not exist: {download_dir}")
 
         # Function to extract risk factors section
         def extract_risk_factors(filepath):
