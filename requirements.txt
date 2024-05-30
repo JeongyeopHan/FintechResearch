@@ -6,3 +6,4 @@ openai
 pydantic
 requests
 lxml
+edgar-crawler
