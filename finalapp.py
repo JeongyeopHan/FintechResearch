@@ -10,27 +10,23 @@ from bs4 import BeautifulSoup, FeatureNotFound
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
-from langchain.chat_models import ChatOpenAI
+from langchain.llms import OpenAI
 from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 from langchain.schema import Document
-from tenacity import retry, wait_exponential, stop_after_attempt
 
-# Set up the OpenAI API key from environment variable
+# Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
+# Ensure the API keys are not None
 if not openai_api_key:
     st.error("API keys are not set properly. Please check your environment variables.")
     st.stop()
 
+# Initialize OpenAI API
 os.environ["OPENAI_API_KEY"] = openai_api_key
-llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
-
-# Retry logic for OpenAI API requests
-@retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(6), reraise=True)
-def embed_with_retry(embeddings, texts):
-    return embeddings.embed_texts(texts)
+llm = OpenAI(temperature=0)
 
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
@@ -41,7 +37,7 @@ if st.button("Analyze"):
         filings = []
 
         # Initialize Downloader
-        dl = Downloader("JHON", "jhondoe@gmail.com", ".")
+        dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
 
         # Download all 10-K filings for the ticker from 2023 onward
         dl.get("10-K", ticker, after="2023-11-01", before="2023-12-31")
@@ -100,11 +96,10 @@ if st.button("Analyze"):
             split_texts = text_splitter.split_documents(filings)
 
             embeddings = OpenAIEmbeddings()
-
+            
             # Use a temporary directory for Chroma persistence
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    embedded_texts = embed_with_retry(embeddings, [doc.page_content for doc in split_texts])
                     db = Chroma.from_documents(split_texts, embeddings, persist_directory=temp_dir)
                     db.persist()
                 except Exception as e:
@@ -117,7 +112,7 @@ if st.button("Analyze"):
             tools = [
                 Tool(
                     args_schema=DocumentInput,
-                    name="document_tool",
+                    name="Document Tool",
                     description="Useful for answering questions about the document",
                     func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
                 )
