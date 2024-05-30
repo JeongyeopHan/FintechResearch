@@ -15,7 +15,6 @@ from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 from langchain.schema import Document
-from langchain.llms import OpenAI
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -29,26 +28,18 @@ if not openai_api_key:
 os.environ["OPENAI_API_KEY"] = openai_api_key
 llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
 
-# Function to get sentiment using OpenAI
-def get_sentiment(text):
-    llm = OpenAI(temperature=0.9)
-    sentiment_text = f"Sentiment analysis: {text}"
-    sentiment = llm(sentiment_text)
-    return sentiment
-
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
 
 ticker = st.text_input("Enter the company ticker:")
 if st.button("Analyze"):
     if ticker:
-        risk_filings = []
-        mna_filings = []
+        filings = []
 
         # Initialize Downloader
-        dl = Downloader("Jeongyeop", "20150613rke3@gmail.com", ".")
+        dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
 
-        # Download all 10-K filings for the ticker from 2018 onward
+        # Download all 10-K filings for the ticker from 2023 onward
         dl.get("10-K", ticker, after="2018-11-01", before="2023-12-31")
 
         # Directory where filings are downloaded
@@ -61,17 +52,17 @@ if st.button("Analyze"):
 
         st.write(f"Checking directory: {download_dir}")
 
-        # Function to extract sections
+        # Function to extract risk factors section
         def extract_section(filepath, start_marker, end_marker):
             try:
                 with open(filepath, 'r', encoding='utf-8') as file:
                     soup = BeautifulSoup(file, 'lxml')
                     section_text = ""
-                    section_found = False
+                    in_section = False
                     for line in soup.get_text().splitlines():
                         if start_marker in line:
-                            section_found = True
-                        if section_found:
+                            in_section = True
+                        if in_section:
                             section_text += line + "\n"
                             if end_marker in line:
                                 break
@@ -93,37 +84,27 @@ if st.button("Analyze"):
                     if file == "full-submission.txt":
                         filepath = os.path.join(subdir_path, file)
                         st.write(f"Processing file: {filepath}")
-                        risk_section_text = extract_section(filepath, "Item 1A.", "Item 1B.")
-                        mna_section_text = extract_section(filepath, "Item 7.", "Item 8.")
-                        if risk_section_text:
-                            risk_filings.append(Document(page_content=risk_section_text, metadata={"source": filepath}))
-                        if mna_section_text:
-                            mna_filings.append(Document(page_content=mna_section_text, metadata={"source": filepath}))
+                        risk_factors_text = extract_section(filepath, "Item 1A.", "Item 1B.")
+                        mda_text = extract_section(filepath, "Item 7.", "Item 7A.")
+                        if risk_factors_text:
+                            filings.append(Document(page_content=risk_factors_text, metadata={"source": filepath, "section": "Risk Factors"}))
+                        if mda_text:
+                            filings.append(Document(page_content=mda_text, metadata={"source": filepath, "section": "MD&A"}))
 
-        if risk_filings:
-            st.write(f"Found {len(risk_filings)} filings with risk factors.")
-        else:
-            st.write("No risk factors found for the given ticker.")
-
-        if mna_filings:
-            st.write(f"Found {len(mna_filings)} filings with MDA sections.")
-        else:
-            st.write("No MDA sections found for the given ticker.")
-
-        if risk_filings or mna_filings:
+        if filings:
+            st.write(f"Found {len(filings)} filings with sections of interest.")
+            
+            # Process filings with Langchain
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-            risk_texts = text_splitter.split_documents(risk_filings)
-            mna_texts = text_splitter.split_documents(mna_filings)
+            split_texts = text_splitter.split_documents(filings)
 
             embeddings = OpenAIEmbeddings()
-
+            
             # Use a temporary directory for Chroma persistence
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    risk_db = Chroma.from_documents(risk_texts, embeddings, persist_directory=temp_dir)
-                    risk_db.persist()
-                    mna_db = Chroma.from_documents(mna_texts, embeddings, persist_directory=temp_dir)
-                    mna_db.persist()
+                    db = Chroma.from_documents(split_texts, embeddings, persist_directory=temp_dir)
+                    db.persist()
                 except Exception as e:
                     st.error(f"Error initializing Chroma: {e}")
                     st.stop()
@@ -134,15 +115,9 @@ if st.button("Analyze"):
             tools = [
                 Tool(
                     args_schema=DocumentInput,
-                    name="Risk Factors Tool",
-                    description="Useful for answering questions about the risk factors section",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=risk_db.as_retriever()),
-                ),
-                Tool(
-                    args_schema=DocumentInput,
-                    name="MDA Tool",
-                    description="Useful for answering questions about the MDA section",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=mna_db.as_retriever()),
+                    name="Document Tool",
+                    description="Useful for answering questions about the document",
+                    func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
                 )
             ]
 
@@ -150,22 +125,19 @@ if st.button("Analyze"):
 
             # Define the questions
             risk_question = f"Summarize the main risks identified by {ticker} in its 10-K filings. In English."
-            mna_question = f"Perform sentiment analysis on the MDA sections of {ticker}'s 10-K filings and provide a summary."
+            mda_sentiment_question = f"Perform sentiment analysis on the extracted MD&A sections for {ticker}. Indicate whether the tone is generally positive, negative, or neutral."
 
             # Get answers from the agent
             risk_response = agent({"input": risk_question})
-            st.write("Risk Factors Summary:")
+            mda_sentiment_response = agent({"input": mda_sentiment_question})
+
+            st.write("Main Risks Identified:")
             st.write(risk_response["output"])
 
-            # Perform sentiment analysis on the MDA sections
-            sentiment_summary = ""
-            for doc in mna_texts:
-                sentiment = get_sentiment(doc.page_content)
-                sentiment_summary += f"{sentiment}\n"
+            st.write("MD&A Sentiment Analysis Result:")
+            st.write(mda_sentiment_response["output"])
 
-            st.write("MDA Sentiment Analysis Summary:")
-            st.write(sentiment_summary)
         else:
-            st.write("No relevant sections found for the given ticker.")
+            st.write("No filings found for the given ticker.")
     else:
         st.write("Please enter a ticker symbol.")
