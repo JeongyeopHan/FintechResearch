@@ -112,7 +112,7 @@ if st.button("Analyze"):
             tools = [
                 Tool(
                     args_schema=DocumentInput,
-                    name="Document Tool",
+                    name="document_tool",  # Ensure the name matches the required pattern
                     description="Useful for answering questions about the document",
                     func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
                 )
