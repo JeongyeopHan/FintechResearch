@@ -9,6 +9,7 @@ from langchain.llms import OpenAI
 from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
+import tempfile
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -34,38 +35,32 @@ if st.button("Analyze"):
         dl = Downloader("Jeong", "20150613rke3@gmail.com")
 
         # Download all 10-K filings for the ticker from 1995 to 2023
-        dl.get("10-K", ticker, after="1995-01-01", before="2023-12-31")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dl.get("10-K", ticker, after="1995-01-01", before="2023-12-31", download_details=True, download_dir=temp_dir)
 
-        # Directory where filings are downloaded
-        download_dir = f"C:/Program Files/fillings/10k/sec-edgar-filings/{ticker}/10-K/"
+            # Function to extract risk factors section
+            def extract_risk_factors(filepath):
+                with open(filepath, 'r') as file:
+                    soup = BeautifulSoup(file, 'html.parser')
+                    risk_factors_section = ""
+                    risk_factors = False
+                    for line in soup.get_text().splitlines():
+                        if "Item 1A." in line:
+                            risk_factors = True
+                        if risk_factors:
+                            risk_factors_section += line + "\n"
+                            if "Item 1B." in line:
+                                break
+                    return risk_factors_section
 
-        # Ensure the download directory exists
-        if not os.path.exists(download_dir):
-            os.makedirs(download_dir)
-
-        # Function to extract risk factors section
-        def extract_risk_factors(filepath):
-            with open(filepath, 'r') as file:
-                soup = BeautifulSoup(file, 'html.parser')
-                risk_factors_section = ""
-                risk_factors = False
-                for line in soup.get_text().splitlines():
-                    if "Item 1A." in line:
-                        risk_factors = True
-                    if risk_factors:
-                        risk_factors_section += line + "\n"
-                        if "Item 1B." in line:
-                            break
-                return risk_factors_section
-
-        # Iterate over downloaded filings and extract "Risk Factors"
-        for root, dirs, files in os.walk(download_dir):
-            for file in files:
-                if file.endswith(".html"):
-                    filepath = os.path.join(root, file)
-                    section_text = extract_risk_factors(filepath)
-                    if section_text:
-                        filings.append({"text": section_text})
+            # Iterate over downloaded filings and extract "Risk Factors"
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    if file.endswith(".html"):
+                        filepath = os.path.join(root, file)
+                        section_text = extract_risk_factors(filepath)
+                        if section_text:
+                            filings.append({"text": section_text})
 
         if filings:
             # Process filings with Langchain
