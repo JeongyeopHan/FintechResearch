@@ -1,7 +1,7 @@
 import streamlit as st
 import os
-import requests
-from bs4 import BeautifulSoup
+from edgar_crawler import EdgarCrawler
+from edgar_crawler.extract_items import ItemExtractor
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
@@ -30,50 +30,37 @@ if st.button("Analyze"):
     if ticker:
         filings = []
 
-        def get_sec_filings(ticker):
-            base_url = "https://www.sec.gov/cgi-bin/browse-edgar"
-            params = {
-                "action": "getcompany",
-                "CIK": ticker,
-                "type": "10-K",
-                "dateb": "",
-                "owner": "exclude",
-                "start": "",
-                "output": "xml",
-                "count": "100"
-            }
-            response = requests.get(base_url, params=params)
-            soup = BeautifulSoup(response.content, "lxml")
-            return soup.find_all("filing")
+        # Configure and initialize EdgarCrawler
+        crawler = EdgarCrawler(
+            user_agent="Jeong 20150613rke3@gmail.com",
+            start_year=1995,
+            end_year=2023,
+            filing_types=["10-K"],
+            cik_tickers=[ticker],
+            raw_filings_folder="RAW_FILINGS",
+            indices_folder="INDICES",
+            skip_present_indices=True,
+        )
 
-        def download_filing(filing_url):
-            response = requests.get(filing_url)
-            return response.content.decode("utf-8")
+        # Download filings
+        crawler.run()
 
-        def extract_risk_factors(filing_text):
-            soup = BeautifulSoup(filing_text, "html.parser")
-            risk_factors_section = ""
-            risk_factors = False
-            for line in soup.get_text().splitlines():
-                if "Item 1A." in line:
-                    risk_factors = True
-                if risk_factors:
-                    risk_factors_section += line + "\n"
-                    if "Item 1B." in line:
-                        break
-            return risk_factors_section
+        # Configure and initialize ItemExtractor
+        extractor = ItemExtractor(
+            raw_filings_folder="RAW_FILINGS",
+            extracted_filings_folder="EXTRACTED_FILINGS",
+            items_to_extract=["1A"],
+            remove_tables=True,
+            skip_extracted_filings=True,
+        )
 
-        filings_metadata = get_sec_filings(ticker)
-        for filing in filings_metadata:
-            filing_date = filing.find("datefiled").text
-            filing_url = "https://www.sec.gov" + filing.find("filinghref").text.replace("-index.htm", ".txt")
+        # Extract items
+        extracted_items = extractor.run()
 
-            try:
-                filing_text = download_filing(filing_url)
-                section_text = extract_risk_factors(filing_text)
-                filings.append({"date": filing_date, "text": section_text})
-            except Exception as e:
-                st.write(f"Error fetching section 1A for date {filing_date}: {e}")
+        # Process extracted filings
+        for item in extracted_items:
+            if "1A" in item:
+                filings.append({"text": item["1A"]})
 
         if filings:
             # Process filings with Langchain
