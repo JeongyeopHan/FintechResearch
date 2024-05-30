@@ -6,7 +6,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.llms import OpenAI
-from langchain.chains.question_answering import load_qa_chain
+from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 
@@ -93,7 +93,7 @@ if st.button("Analyze"):
                     args_schema=DocumentInput,
                     name="Document Tool",
                     description="Useful for answering questions about the document",
-                    func=load_qa_chain(llm=llm, retriever=db.as_retriever()),
+                    func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
                 )
             ]
 
