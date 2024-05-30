@@ -15,6 +15,7 @@ from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 from langchain.schema import Document
+from tenacity import retry, wait_exponential, stop_after_attempt
 
 # Set up the OpenAI API key from environment variable
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -25,6 +26,11 @@ if not openai_api_key:
 
 os.environ["OPENAI_API_KEY"] = openai_api_key
 llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
+
+# Retry logic for OpenAI API requests
+@retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(6), reraise=True)
+def embed_with_retry(embeddings, texts):
+    return embeddings.embed_texts(texts)
 
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
@@ -98,6 +104,7 @@ if st.button("Analyze"):
             # Use a temporary directory for Chroma persistence
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
+                    embedded_texts = embed_with_retry(embeddings, [doc.page_content for doc in split_texts])
                     db = Chroma.from_documents(split_texts, embeddings, persist_directory=temp_dir)
                     db.persist()
                 except Exception as e:
@@ -110,7 +117,7 @@ if st.button("Analyze"):
             tools = [
                 Tool(
                     args_schema=DocumentInput,
-                    name="Document Tool",
+                    name="document_tool",
                     description="Useful for answering questions about the document",
                     func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
                 )
