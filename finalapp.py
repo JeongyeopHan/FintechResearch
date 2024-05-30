@@ -1,69 +1,81 @@
-# Install necessary packages if not already installed
-# !pip install sec-edgar-downloader sec-api langchain streamlit openai
-
-import os
-import json
-from sec_edgar_downloader import Downloader
-from sec_api import XbrlApi
-from langchain.vectorstores import SimpleVectorStore
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.llms import OpenAI
 import streamlit as st
+import os
+from sec_api import ExtractorApi, XbrlApi
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import Chroma
+from langchain.llms import OpenAI
+from langchain.agents import initialize_agent, AgentType
+from langchain.tools import RetrievalQA, Tool
+from pydantic import BaseModel, Field
 
-# Initialize API clients
-dl = Downloader()
-xbrlApi = XbrlApi(api_key="your_sec_api_key")
-openai.api_key = 'your_openai_api_key'
+# Set API keys
+extractor_api_key = "92c9dd860762df20722b795af0e4b9fc341ef27c1d888c609db50a2fbacee81a"
+openai_api_key = "sk-proj-mCXyTBtkG50GO2xQn6EDT3BlbkFJpIRJ2R3tfaea2S7Y6yhY"
 
-# Function to download 10-K filings
-def download_10k_filings(tickers, start_year=1995, end_year=2023):
-    for ticker in tickers:
-        dl.get("10-K", ticker, after=f"{start_year}-01-01", before=f"{end_year}-12-31")
+# Initialize APIs
+extractor_api = ExtractorApi(api_key=extractor_api_key)
+xbrl_api = XbrlApi(api_key=extractor_api_key)
 
-# Function to extract text from the downloaded filings using sec-api
-def extract_text_from_filings(ticker):
-    filings_dir = f"./sec-edgar-filings/{ticker}/10-K/"
-    texts = []
-    for filename in os.listdir(filings_dir):
-        with open(os.path.join(filings_dir, filename), 'r', encoding='utf-8') as file:
-            document_id = json.load(file)['filingId']
-            report = xbrlApi.xbrl_to_dict(document_id)
-            texts.append(report['document']['content'])
-    return texts
+# Initialize OpenAI API
+os.environ["OPENAI_API_KEY"] = openai_api_key
+llm = OpenAI(temperature=0)
 
-# Define the tickers and download the filings
-tickers = ['AAPL', 'GOOGL', 'MSFT']  # Example tickers
-download_10k_filings(tickers)
+# Streamlit app layout
+st.title("SEC Filings Analysis with ChatGPT")
 
-# Extract texts from filings
-all_texts = {ticker: extract_text_from_filings(ticker) for ticker in tickers}
+ticker = st.text_input("Enter the company ticker:")
+if st.button("Analyze"):
+    if ticker:
+        filings = []
 
-# Prepare embeddings and vector store
-embeddings = OpenAIEmbeddings(openai_api_key=openai.api_key)
-vector_store = SimpleVectorStore(embedding_function=embeddings.embed_text)
+        # Extract filings for the given ticker from 1995 to 2023
+        for year in range(1995, 2024):
+            try:
+                # Get the filing metadata
+                htm_url = f"https://www.sec.gov/Archives/edgar/data/{ticker}/{year}.htm"
+                xbrl_json = xbrl_api.xbrl_to_json(htm_url=htm_url)
 
-# Load documents into the vector store
-for ticker in all_texts:
-    documents = [{"text": text, "metadata": {"ticker": ticker}} for text in all_texts[ticker]]
-    vector_store.add_documents(documents)
+                # Extract the 'Risk Factors' section
+                section_text = extractor_api.get_section(htm_url, "1A", "text")
+                filings.append({"year": year, "text": section_text})
+            except Exception as e:
+                st.write(f"Error fetching data for year {year}: {e}")
 
-# Implement QA system
-def ask_question(question):
-    relevant_docs = vector_store.similarity_search(question, k=5)
-    llm = OpenAI(openai_api_key=openai.api_key)
-    context = " ".join([doc["text"] for doc in relevant_docs])
-    response = llm.generate_text(f"Context: {context}\nQuestion: {question}\nAnswer:")
-    return response["choices"][0]["text"].strip()
+        if filings:
+            # Process filings with Langchain
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+            texts = [doc["text"] for doc in filings]
+            split_texts = text_splitter.split_documents(texts)
 
-# Streamlit app
-st.title("SEC EDGAR Filings Q&A System")
+            embeddings = OpenAIEmbeddings()
+            db = Chroma.from_documents(split_texts, embeddings, persist_directory="path/to/persist")
+            db.persist()
 
-ticker = st.text_input("Enter company ticker:")
-question = st.text_input("Ask a question about the filings:")
+            class DocumentInput(BaseModel):
+                question: str = Field()
 
-if st.button("Submit"):
-    if ticker and question:
-        response = ask_question(question)
-        st.write(f"Answer: {response}")
-    else:
-        st.write("Please enter both a ticker and a question.")
+            tools = [
+                Tool(
+                    args_schema=DocumentInput,
+                    name="Document Tool",
+                    description="Useful for answering questions about the document",
+                    func=RetrievalQA.from_chain_type(llm=llm, retriever=db),
+                )
+            ]
+
+            agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=tools, llm=llm, verbose=True)
+
+            # Define the questions
+            questions = [
+                f"Summarize {ticker}'s financial performance over the past years, including revenue growth, profitability (net income), and margins. In English",
+                f"Identify and analyze {ticker}'s earnings per share (EPS diluted and basic), calculate Return on equity (ROE) and Debt-to-Equity ratio for the past few years. In English",
+                f"Add bullet points for main risks identified by {ticker} in its 10-K filing. In English"
+            ]
+
+            # Get answers from the agent
+            for question in questions:
+                response = agent({"input": question})
+                st.write(response["output"])
+        else:
+            st.write("No filings found for the given ticker.")
