@@ -5,13 +5,18 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.llms import OpenAI
-from langchain.chains import RetrievalQA
+from langchain.chains.question_answering import load_qa_chain
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 
 # Get API keys from environment variables
 extractor_api_key = os.getenv("EXTRACTOR_API_KEY")
 openai_api_key = os.getenv("OPENAI_API_KEY")
+
+# Ensure the API keys are not None
+if not extractor_api_key or not openai_api_key:
+    st.error("API keys are not set properly. Please check your environment variables.")
+    st.stop()
 
 # Initialize APIs
 extractor_api = ExtractorApi(api_key=extractor_api_key)
@@ -72,7 +77,7 @@ if st.button("Analyze"):
                     args_schema=DocumentInput,
                     name="Document Tool",
                     description="Useful for answering questions about the document",
-                    func=RetrievalQA.from_chain_type(llm=llm, retriever=db.as_retriever()),
+                    func=load_qa_chain(llm=llm, retriever=db.as_retriever()),
                 )
             ]
 
