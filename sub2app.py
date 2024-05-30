@@ -1,3 +1,8 @@
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
+import streamlit as st
 import os
 import tempfile
 from sec_edgar_downloader import Downloader
@@ -10,8 +15,8 @@ from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 from langchain.schema import Document
-import streamlit as st
-import plotly.graph_objects as go
+import plotly.express as px
+import pandas as pd
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -32,10 +37,7 @@ ticker = st.text_input("Enter the company ticker:")
 if st.button("Analyze"):
     if ticker:
         risk_factor_filings = []
-        mdna_filings = []
-        income_statement_filings = []
-        balance_sheet_filings = []
-        cash_flow_statement_filings = []
+        financial_statements = []
 
         # Initialize Downloader
         dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
@@ -91,76 +93,108 @@ if st.button("Analyze"):
                         if risk_factors_text:
                             risk_factor_filings.append(Document(page_content=risk_factors_text, metadata={"source": filepath}))
 
-                        # Extract MD&A
-                        mdna_text = extract_section(filepath, "Item 7.", "Item 7A.")
-                        if mdna_text:
-                            mdna_filings.append(Document(page_content=mdna_text, metadata={"source": filepath}))
+                        # Extract Financial Statements
+                        financial_text = extract_section(filepath, "Item 8.", "Item 9.")
+                        if financial_text:
+                            financial_statements.append(Document(page_content=financial_text, metadata={"source": filepath}))
 
-                        # Extract Income Statement
-                        income_statement_text = extract_section(filepath, "Item 8.", "Item 9.")
-                        if income_statement_text:
-                            income_statement_filings.append(Document(page_content=income_statement_text, metadata={"source": filepath}))
-
-                        # Extract Balance Sheet
-                        balance_sheet_text = extract_section(filepath, "Item 8.", "Item 9.")
-                        if balance_sheet_text:
-                            balance_sheet_filings.append(Document(page_content=balance_sheet_text, metadata={"source": filepath}))
-
-                        # Extract Cash Flow Statement
-                        cash_flow_statement_text = extract_section(filepath, "Item 8.", "Item 9.")
-                        if cash_flow_statement_text:
-                            cash_flow_statement_filings.append(Document(page_content=cash_flow_statement_text, metadata={"source": filepath}))
-
-        if risk_factor_filings and mdna_filings and income_statement_filings and balance_sheet_filings and cash_flow_statement_filings:
+        if risk_factor_filings and financial_statements:
             st.write(f"Found {len(risk_factor_filings)} filings with risk factors.")
-            st.write(f"Found {len(mdna_filings)} filings with MD&A sections.")
-            st.write(f"Found {len(income_statement_filings)} filings with Income Statements.")
-            st.write(f"Found {len(balance_sheet_filings)} filings with Balance Sheets.")
-            st.write(f"Found {len(cash_flow_statement_filings)} filings with Cash Flow Statements.")
+            st.write(f"Found {len(financial_statements)} filings with financial statements.")
 
-            # Function to create Sankey diagram
-            def create_sankey(labels, sources, targets, values, title):
-                fig = go.Figure(data=[go.Sankey(
-                    node=dict(
-                        pad=15,
-                        thickness=20,
-                        line=dict(color="black", width=0.5),
-                        label=labels,
-                    ),
-                    link=dict(
-                        source=sources,
-                        target=targets,
-                        value=values,
-                    ))])
-                fig.update_layout(title_text=title, font_size=10)
-                return fig
+            # Process risk factors with Langchain
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+            risk_split_texts = text_splitter.split_documents(risk_factor_filings)
 
-            # Example visualization for Income Statement
-            labels = ["Revenue", "Cost of Revenue", "Gross Profit", "Operating Expenses", "Operating Profit", "Net Profit", "Products", "Services"]
-            sources = [0, 0, 2, 2, 3, 4, 0, 0]
-            targets = [2, 1, 4, 3, 5, 5, 2, 2]
-            values = [383.3, 214.1, 169.1, 54.8, 114.3, 97.0, 298.1, 85.2]
+            embeddings = OpenAIEmbeddings()
+            
+            # Use a temporary directory for Chroma persistence
+            with tempfile.TemporaryDirectory() as temp_dir:
+                try:
+                    risk_db = Chroma.from_documents(risk_split_texts, embeddings, persist_directory=temp_dir)
+                    risk_db.persist()
+                except Exception as e:
+                    st.error(f"Error initializing Chroma for risk factors: {e}")
+                    st.stop()
 
-            fig = create_sankey(labels, sources, targets, values, "Income Statement FY23")
-            st.plotly_chart(fig)
+            # Process financial statements with Langchain
+            financial_split_texts = text_splitter.split_documents(financial_statements)
+            
+            with tempfile.TemporaryDirectory() as temp_dir:
+                try:
+                    financial_db = Chroma.from_documents(financial_split_texts, embeddings, persist_directory[temp_dir])
+                    financial_db.persist()
+                except Exception as e:
+                    st.error(f"Error initializing Chroma for financial statements: {e}")
+                    st.stop()
 
-            # Example visualization for Balance Sheet
-            labels_bs = ["Current Assets", "Non-Current Assets", "Total Assets", "Current Liabilities", "Non-Current Liabilities", "Total Liabilities", "Equity"]
-            sources_bs = [0, 1, 2, 2, 4, 3, 2]
-            targets_bs = [2, 2, 3, 4, 5, 6, 6]
-            values_bs = [143.6, 209.0, 352.6, 145.3, 145.1, 290.4, 73.8]
+            class DocumentInput(BaseModel):
+                question: str = Field()
 
-            fig_bs = create_sankey(labels_bs, sources_bs, targets_bs, values_bs, "Balance Sheet FY23")
-            st.plotly_chart(fig_bs)
+            risk_tools = [
+                Tool(
+                    args_schema=DocumentInput,
+                    name="risk_document_tool",  # Ensure the name matches the required pattern
+                    description="Useful for answering questions about risk factors in the document",
+                    func=RetrievalQA.from_chain_type(llm=llm, retriever=risk_db.as_retriever()),
+                )
+            ]
 
-            # Example visualization for Cash Flow Statement
-            labels_cf = ["Net Income", "Cash from Operations", "Cash from Investing", "Cash from Financing", "Net Cash Flow"]
-            sources_cf = [0, 1, 1, 1, 1]
-            targets_cf = [1, 2, 3, 4, 4]
-            values_cf = [97.0, 110.5, 3.7, -108.5, 5.8]
+            financial_tools = [
+                Tool(
+                    args_schema=DocumentInput,
+                    name="financial_document_tool",  # Ensure the name matches the required pattern
+                    description="Useful for answering questions about financial statements in the document",
+                    func=RetrievalQA.from_chain_type(llm=llm, retriever=financial_db.as_retriever()),
+                )
+            ]
 
-            fig_cf = create_sankey(labels_cf, sources_cf, targets_cf, values_cf, "Cash Flow Statement FY23")
-            st.plotly_chart(fig_cf)
+            risk_agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=risk_tools, llm=llm, verbose=True)
+            financial_agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=financial_tools, llm=llm, verbose=True)
+
+            # Define the questions
+            risk_question = f"Identify and rank the five major risks identified by {ticker} in its 10-K filings."
+            financial_question = f"Summarize the financial statements of {ticker} over the recent years."
+
+            # Get answers from the agents
+            risk_response = risk_agent({"input": risk_question})
+            financial_response = financial_agent({"input": financial_question})
+
+            st.write("Risk Factors Analysis:")
+            st.write(risk_response["output"])
+
+            st.write("Financial Statements Summary:")
+            st.write(financial_response["output"])
+
+            # Example risk factors analysis output (replace with actual response)
+            risk_factors_ranked = [
+                {"Risk Factor": "Data Security Standards", "Importance": 5},
+                {"Risk Factor": "Fluctuating Net Sales", "Importance": 4},
+                {"Risk Factor": "Gross Margins Pressure", "Importance": 3},
+                {"Risk Factor": "New Business Strategies", "Importance": 2},
+                {"Risk Factor": "IT System Failures", "Importance": 1}
+            ]
+
+            # Example financial summary output (replace with actual response)
+            financial_summary = [
+                {"Year": 2020, "Revenue": 274515, "Net Income": 57411, "Total Assets": 323888},
+                {"Year": 2021, "Revenue": 365817, "Net Income": 94680, "Total Assets": 351002},
+                {"Year": 2022, "Revenue": 394328, "Net Income": 99983, "Total Assets": 351002}
+            ]
+
+            # Convert to DataFrame for visualization
+            risk_factors_df = pd.DataFrame(risk_factors_ranked)
+            financial_summary_df = pd.DataFrame(financial_summary)
+
+            # Create bar charts for risk factors
+            fig_risk = px.bar(risk_factors_df, x='Risk Factor', y='Importance', title='Major Risk Factors Ranked by Importance')
+
+            # Create line charts for financial summary
+            fig_financial = px.line(financial_summary_df, x='Year', y=['Revenue', 'Net Income', 'Total Assets'],
+                                    title='Financial Summary Over Recent Years')
+
+            st.plotly_chart(fig_risk)
+            st.plotly_chart(fig_financial)
 
         else:
             st.write("No filings found for the given ticker.")
