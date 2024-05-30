@@ -15,6 +15,7 @@ from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 from langchain.schema import Document
+from transformers import pipeline
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -26,7 +27,7 @@ if not openai_api_key:
 
 # Initialize OpenAI API
 os.environ["OPENAI_API_KEY"] = openai_api_key
-llm = ChatOpenAI(temperature=0)
+llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
 
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
@@ -38,10 +39,10 @@ if st.button("Analyze"):
         mna_filings = []
 
         # Initialize Downloader
-        dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
+        dl = Downloader()
 
-        # Download all 10-K filings for the ticker from 2021 onward
-        dl.get("10-K", ticker, after="2018-01-01", before="2023-12-31")
+        # Download all 10-K filings for the ticker from 2018 onward
+        dl.get("10-K", ticker, after="2018-11-01", before="2023-12-31")
 
         # Directory where filings are downloaded
         download_dir = os.path.join(".", "sec-edgar-filings", ticker, "10-K")
@@ -86,7 +87,7 @@ if st.button("Analyze"):
                         filepath = os.path.join(subdir_path, file)
                         st.write(f"Processing file: {filepath}")
                         risk_section_text = extract_section(filepath, "Item 1A.", "Item 1B.")
-                        mna_section_text = extract_section(filepath, "Item 7A.", "Item 8.")
+                        mna_section_text = extract_section(filepath, "Item 7.", "Item 8.")
                         if risk_section_text:
                             risk_filings.append(Document(page_content=risk_section_text, metadata={"source": filepath}))
                         if mna_section_text:
@@ -108,7 +109,7 @@ if st.button("Analyze"):
             mna_texts = text_splitter.split_documents(mna_filings)
 
             embeddings = OpenAIEmbeddings()
-            
+
             # Use a temporary directory for Chroma persistence
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
@@ -143,7 +144,7 @@ if st.button("Analyze"):
             # Define the questions
             questions = [
                 f"Summarize the main risks identified by {ticker} in its 10-K filings. In English.",
-                f"How many positive words and negative words in {ticker} according to the MDA texts. In English do sentiment analysis",
+                f"Perform sentiment analysis on the MDA sections of {ticker}'s 10-K filings and provide a summary."
             ]
 
             responses = []
@@ -151,11 +152,26 @@ if st.button("Analyze"):
                 response = agent({"input": question})
                 responses.append(response["output"])
 
+            # Initialize sentiment analysis pipeline
+            sentiment_pipeline = pipeline("sentiment-analysis")
+
+            # Perform sentiment analysis on the MDA sections
+            positive_count_total = 0
+            negative_count_total = 0
+            for doc in mna_texts:
+                sentiments = sentiment_pipeline(doc.page_content)
+                positive_count = sum(1 for sentiment in sentiments if sentiment['label'] == 'POSITIVE')
+                negative_count = sum(1 for sentiment in sentiments if sentiment['label'] == 'NEGATIVE')
+                positive_count_total += positive_count
+                negative_count_total += negative_count
+
             # Display responses
             st.write("Risk Factors Summary:")
             st.write(responses[0])
             st.write("MDA Summary:")
             st.write(responses[1])
+            st.write(f"Total positive statements: {positive_count_total}")
+            st.write(f"Total negative statements: {negative_count_total}")
         else:
             st.write("No relevant sections found for the given ticker.")
     else:
