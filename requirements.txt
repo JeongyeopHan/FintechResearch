@@ -1,7 +1,7 @@
 beautifulsoup4
 langchain==0.0.251
 langchain-community==0.0.3
-openai==0.27.0
+openai==0.28.0
 pydantic
 requests
 lxml
