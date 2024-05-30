@@ -28,7 +28,17 @@ if st.button("Download 10-K Filings"):
         # Call the function to download 10-K filings
         try:
             get10Kfilings(default_name, default_email, default_path, ticker)
-            st.success(f"Downloaded 10-K filings for {ticker} to {default_path}")
+
+            # Check if files are downloaded
+            download_dir = os.path.join(default_path, f"sec-edgar-filings/{ticker}/10-K/")
+            if os.path.exists(download_dir) and os.listdir(download_dir):
+                st.success(f"Downloaded 10-K filings for {ticker} to {download_dir}")
+                st.write(f"Files downloaded to: {download_dir}")
+                st.write("Downloaded files:")
+                for file in os.listdir(download_dir):
+                    st.write(file)
+            else:
+                st.warning("No files were downloaded. Please check the ticker symbol and try again.")
         except Exception as e:
             st.error(f"Error downloading filings: {e}")
     else:
