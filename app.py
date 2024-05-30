@@ -3,10 +3,20 @@ import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 import streamlit as st
+import os
+import tempfile
+from sec_edgar_downloader import Downloader
+from bs4 import BeautifulSoup, FeatureNotFound
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.vectorstores import Chroma
+from langchain.chat_models import ChatOpenAI
+from langchain.chains import RetrievalQA
+from langchain.agents import initialize_agent, AgentType, Tool
+from pydantic import BaseModel, Field
+from langchain.schema import Document
 from task1_download import download_filings
 from task2_analysis import extract_risk_factors, analyze_filings
-from langchain.schema import Document
-import os
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -18,6 +28,7 @@ if not openai_api_key:
 
 # Initialize OpenAI API
 os.environ["OPENAI_API_KEY"] = openai_api_key
+llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
 
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
