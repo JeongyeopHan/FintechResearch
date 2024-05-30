@@ -37,7 +37,11 @@ if st.button("Analyze"):
         dl.get("10-K", ticker, after="1995-01-01", before="2023-12-31")
 
         # Directory where filings are downloaded
-        download_dir = f"./sec-edgar-filings/{ticker}/10-K/"
+        download_dir = f"C:/Program Files/fillings/10k/sec-edgar-filings/{ticker}/10-K/"
+
+        # Ensure the download directory exists
+        if not os.path.exists(download_dir):
+            os.makedirs(download_dir)
 
         # Function to extract risk factors section
         def extract_risk_factors(filepath):
@@ -95,3 +99,5 @@ if st.button("Analyze"):
             st.write(response["output"])
         else:
             st.write("No filings found for the given ticker.")
+    else:
+        st.write("Please enter a ticker symbol.")
