@@ -8,7 +8,7 @@ import tempfile
 from sec_edgar_downloader import Downloader
 from bs4 import BeautifulSoup, FeatureNotFound
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.llms import OpenAI
 from langchain.chains import RetrievalQA
@@ -37,7 +37,7 @@ if st.button("Analyze"):
         filings = []
 
         # Initialize Downloader
-        dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
+        dl = Downloader("JHON", "jhondoe@gmail.com", ".")
 
         # Download all 10-K filings for the ticker from 2023 onward
         dl.get("10-K", ticker, after="2023-11-01", before="2023-12-31")
@@ -95,7 +95,7 @@ if st.button("Analyze"):
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             split_texts = text_splitter.split_documents(filings)
 
-            embeddings = OpenAIEmbeddings()
+            embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
             
             # Use a temporary directory for Chroma persistence
             with tempfile.TemporaryDirectory() as temp_dir:
