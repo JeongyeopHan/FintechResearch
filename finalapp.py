@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup, FeatureNotFound
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
-from langchain.llms import OpenAI
+from langchain.chat_models import ChatOpenAI
 from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
@@ -26,7 +26,7 @@ if not openai_api_key:
 
 # Initialize OpenAI API
 os.environ["OPENAI_API_KEY"] = openai_api_key
-llm = OpenAI(temperature=0)
+llm = ChatOpenAI(temperature=0)
 
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
@@ -41,7 +41,7 @@ if st.button("Analyze"):
         dl = Downloader("Jeong", "20150613rke3@gmail.com", ".")
 
         # Download all 10-K filings for the ticker from 2021 onward
-        dl.get("10-K", ticker, after="2021-01-01", before="2023-12-31")
+        dl.get("10-K", ticker, after="2018-01-01", before="2023-12-31")
 
         # Directory where filings are downloaded
         download_dir = os.path.join(".", "sec-edgar-filings", ticker, "10-K")
@@ -138,7 +138,7 @@ if st.button("Analyze"):
                 )
             ]
 
-            agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=tools, llm=llm, verbose=True)
+            agent = initialize_agent(agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, tools=tools, llm=llm, verbose=True)
 
             # Define the questions
             questions = [
