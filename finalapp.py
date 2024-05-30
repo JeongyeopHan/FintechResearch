@@ -1,6 +1,7 @@
 import streamlit as st
 import os
-from sec_api import ExtractorApi
+import requests
+from bs4 import BeautifulSoup
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
@@ -10,16 +11,12 @@ from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 
 # Get API keys from environment variables
-extractor_api_key = os.getenv("EXTRACTOR_API_KEY")
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
 # Ensure the API keys are not None
-if not extractor_api_key or not openai_api_key:
+if not openai_api_key:
     st.error("API keys are not set properly. Please check your environment variables.")
     st.stop()
-
-# Initialize APIs
-extractor_api = ExtractorApi(api_key=extractor_api_key)
 
 # Initialize OpenAI API
 os.environ["OPENAI_API_KEY"] = openai_api_key
@@ -33,31 +30,50 @@ if st.button("Analyze"):
     if ticker:
         filings = []
 
-        # Construct the query to fetch 10-K filings for the given ticker
-        query = {
-            "query": {
-                "query_string": {
-                    "query": f"ticker:{ticker} AND filedAt:[1995-01-01 TO 2023-12-31] AND formType:\"10-K\""
-                }
-            },
-            "from": "0",
-            "size": "100",
-            "sort": [{"filedAt": {"order": "desc"}}]
-        }
+        def get_sec_filings(ticker):
+            base_url = "https://www.sec.gov/cgi-bin/browse-edgar"
+            params = {
+                "action": "getcompany",
+                "CIK": ticker,
+                "type": "10-K",
+                "dateb": "",
+                "owner": "exclude",
+                "start": "",
+                "output": "xml",
+                "count": "100"
+            }
+            response = requests.get(base_url, params=params)
+            soup = BeautifulSoup(response.content, "lxml")
+            return soup.find_all("filing")
 
-        try:
-            results = extractor_api.get_filings(query)
-            for filing in results["filings"]:
-                filing_url = filing["linkToFilingDetails"]
-                filing_date = filing["filedAt"]
+        def download_filing(filing_url):
+            response = requests.get(filing_url)
+            return response.content.decode("utf-8")
 
-                try:
-                    section_text = extractor_api.get_section(filing_url, "1A", "text")
-                    filings.append({"date": filing_date, "text": section_text})
-                except Exception as e:
-                    st.write(f"Error fetching section 1A from {filing_url}: {e}")
-        except Exception as e:
-            st.write(f"Error fetching filings for ticker {ticker}: {e}")
+        def extract_risk_factors(filing_text):
+            soup = BeautifulSoup(filing_text, "html.parser")
+            risk_factors_section = ""
+            risk_factors = False
+            for line in soup.get_text().splitlines():
+                if "Item 1A." in line:
+                    risk_factors = True
+                if risk_factors:
+                    risk_factors_section += line + "\n"
+                    if "Item 1B." in line:
+                        break
+            return risk_factors_section
+
+        filings_metadata = get_sec_filings(ticker)
+        for filing in filings_metadata:
+            filing_date = filing.find("datefiled").text
+            filing_url = "https://www.sec.gov" + filing.find("filinghref").text.replace("-index.htm", ".txt")
+
+            try:
+                filing_text = download_filing(filing_url)
+                section_text = extract_risk_factors(filing_text)
+                filings.append({"date": filing_date, "text": section_text})
+            except Exception as e:
+                st.write(f"Error fetching section 1A for date {filing_date}: {e}")
 
         if filings:
             # Process filings with Langchain
@@ -83,16 +99,11 @@ if st.button("Analyze"):
 
             agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=tools, llm=llm, verbose=True)
 
-            # Define the questions
-            questions = [
-                f"Summarize {ticker}'s financial performance over the past years, including revenue growth, profitability (net income), and margins. In English",
-                f"Identify and analyze {ticker}'s earnings per share (EPS diluted and basic), calculate Return on equity (ROE) and Debt-to-Equity ratio for the past few years. In English",
-                f"Add bullet points for main risks identified by {ticker} in its 10-K filing. In English"
-            ]
+            # Define the question
+            question = f"Summarize the main risks identified by {ticker} in its 10-K filings. In English."
 
-            # Get answers from the agent
-            for question in questions:
-                response = agent({"input": question})
-                st.write(response["output"])
+            # Get answer from the agent
+            response = agent({"input": question})
+            st.write(response["output"])
         else:
             st.write("No filings found for the given ticker.")
