@@ -31,4 +31,7 @@ OpenAI was used as the LLM API with Chroma and Langchain to improve the quality 
 
 
 ## Video Demo
-[streamlit-subapp-2024-05-31-05-05-14.webm](https://github.com/JeongyeopHan/FintechResearch/assets/133887543/db1908a0-bdce-4c7f-a5a7-01d434ac364e)
+
+https://github.com/JeongyeopHan/FintechResearch/assets/133887543/6996ac39-c95e-4b84-8341-d80cdd3acb7c
+
+
