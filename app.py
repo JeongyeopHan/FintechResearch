@@ -1,13 +1,7 @@
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-
 import streamlit as st
 import os
-import tempfile
-from langchain.schema import Document
-from download_filings import download_10k_filings
-from analyze_filings import extract_risk_factors, analyze_filings
+from download import download_filings
+from analyze import get_filings, analyze_filings
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -17,49 +11,44 @@ if not openai_api_key:
     st.error("API keys are not set properly. Please check your environment variables.")
     st.stop()
 
-# Initialize OpenAI API
-os.environ["OPENAI_API_KEY"] = openai_api_key
-
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
 
 ticker = st.text_input("Enter the company ticker:")
 if st.button("Analyze"):
     if ticker:
-        download_10k_filings(ticker)
+        try:
+            download_dir = download_filings(ticker)
 
-        risk_factor_filings = []
-        download_dir = os.path.join(".", "sec-edgar-filings", ticker, "10-K")
+            # Ensure the download directory exists
+            if not os.path.exists(download_dir):
+                st.error(f"Download directory {download_dir} does not exist.")
+                st.stop()
 
-        # Ensure the download directory exists
-        if not os.path.exists(download_dir):
-            st.error(f"Download directory {download_dir} does not exist.")
-            st.stop()
+            risk_factor_filings, mdna_filings = get_filings(download_dir)
 
-        st.write(f"Checking directory: {download_dir}")
+            if risk_factor_filings and mdna_filings:
+                st.write(f"Found {len(risk_factor_filings)} filings with risk factors.")
+                st.write(f"Found {len(mdna_filings)} filings with MD&A sections.")
 
-        # Iterate over downloaded filings directories and extract sections
-        for root, dirs, files in os.walk(download_dir):
-            for subdir in dirs:
-                subdir_path = os.path.join(root, subdir)
-                st.write(f"Checking subdir: {subdir_path}")
-                for file in os.listdir(subdir_path):
-                    st.write(f"Found file: {file}")
-                    if file == "full-submission.txt":
-                        filepath = os.path.join(subdir_path, file)
-                        st.write(f"Processing file: {filepath}")
+                risk_agent, mdna_agent = analyze_filings(risk_factor_filings, mdna_filings, openai_api_key)
 
-                        # Extract Risk Factors
-                        risk_factors_text = extract_risk_factors(filepath)
-                        if risk_factors_text:
-                            risk_factor_filings.append(Document(page_content=risk_factors_text, metadata={"source": filepath}))
+                # Define the questions
+                risk_question = f"Identify five major risks identified by {ticker} in its 10-K filings. In English."
+                mdna_question = "What are the key strategic initiatives outlined by the company for future growth, and how does the company plan to address any identified risks or challenges in the coming fiscal year?"
 
-        if risk_factor_filings:
-            st.write(f"Found {len(risk_factor_filings)} filings with risk factors.")
-            result = analyze_filings(risk_factor_filings)
-            st.write("Risk Factors Analysis:")
-            st.write(result)
-        else:
-            st.write("No filings found for the given ticker.")
+                # Get answers from the agents
+                risk_response = risk_agent({"input": risk_question})
+                mdna_response = mdna_agent({"input": mdna_question})
+
+                st.write("Risk Factors Analysis:")
+                st.write(risk_response["output"])
+
+                st.write("MD&A Analysis:")
+                st.write(mdna_response["output"])
+            else:
+                st.write("No filings found for the given ticker.")
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
     else:
         st.write("Please enter a ticker symbol.")
