@@ -1,6 +1,6 @@
-streamlit
-sec-api
-langchain
-langchain-community
-openai
-pydantic
+streamlit==1.10.0
+sec-api==1.0.5
+langchain==0.0.171
+langchain-community==0.0.3
+openai==0.27.0
+pydantic==1.10.5
