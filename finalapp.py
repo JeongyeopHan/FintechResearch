@@ -7,24 +7,18 @@ from bs4 import BeautifulSoup
 from sec_edgar_downloader import Downloader
 import openai
 
-# Set paths
-CLEANED_DATA_PATH = "cleaned_data"
-ANALYSIS_RESULTS_PATH = "analysis_results"
-
-# Ensure directories exist
-os.makedirs(CLEANED_DATA_PATH, exist_ok=True)
-os.makedirs(ANALYSIS_RESULTS_PATH, exist_ok=True)
-
 # Function to download 10-K filings
 @st.cache_data
-def download_10k_filings(ticker, email_address, download_path):
-    dl = Downloader(ticker, email_address, download_path)
+def download_10k_filings(ticker, email_address):
+    download_path = f"/tmp/{ticker}_10k"  # Temporary path for download
+    os.makedirs(download_path, exist_ok=True)
+    dl = Downloader(email_address)
     try:
         print(f"Downloading 10-K for {ticker}")
         dl.get("10-K", ticker, after="1995-12-31", before="2023-01-01")
     except Exception as e:
         print(f"An error occurred for {ticker}: {e}")
-    print("Download complete.")
+    return download_path
 
 # Function to remove HTML tags
 def remove_html_tags(text):
@@ -65,7 +59,9 @@ def extract_relevant_sections(text):
     return extracted_sections
 
 # Function to process and clean filings
-def process_and_clean_filings(filings_dir, ticker):
+@st.cache_data
+def process_and_clean_filings(ticker, download_path):
+    filings_dir = os.path.join(download_path, ticker, "10-K")
     extracted_data = []
 
     for filename in os.listdir(filings_dir):
@@ -81,19 +77,11 @@ def process_and_clean_filings(filings_dir, ticker):
                     'Risk Factors': cleaned_sections['risk_factors'],
                     'Financials': cleaned_sections['financials']
                 })
-    
-    cleaned_data_path = os.path.join(CLEANED_DATA_PATH, f"{ticker}_cleaned_filings.json")
-    with open(cleaned_data_path, "w") as outfile:
-        json.dump(extracted_data, outfile)
-    
-    return cleaned_data_path
 
-# Function to load cleaned data
-def load_cleaned_data(file_path):
-    with open(file_path, 'r') as infile:
-        return json.load(infile)
+    return extracted_data
 
 # Function to analyze text using OpenAI API
+@st.cache_data
 def analyze_text(question, text, api_key):
     openai.api_key = api_key
     response = openai.ChatCompletion.create(
@@ -150,13 +138,6 @@ def analyze_financial_performance(data, api_key):
         })
     return pd.DataFrame(insights)
 
-# Function to save analysis results
-def save_analysis_results(insights_df, ticker, analysis_type):
-    analysis_path = os.path.join(ANALYSIS_RESULTS_PATH, f"{ticker}_{analysis_type}_analysis_results.json")
-    with open(analysis_path, "w") as outfile:
-        json.dump(insights_df.to_dict(orient='records'), outfile)
-    return analysis_path
-
 # Streamlit app
 st.title('10-K Filings Analysis App')
 
@@ -167,32 +148,23 @@ email_address = "20150613rke3@gmail.com"
 
 if st.sidebar.button('Download and Analyze'):
     with st.spinner('Downloading 10-K filings...'):
-        filings_dir = os.path.join(CLEANED_DATA_PATH, ticker_input)
-        os.makedirs(filings_dir, exist_ok=True)
-        download_10k_filings(ticker_input, email_address, filings_dir)
+        download_path = download_10k_filings(ticker_input, email_address)
         st.success('Download complete!')
         
     with st.spinner('Processing and cleaning filings...'):
-        cleaned_data_path = process_and_clean_filings(filings_dir, ticker_input)
+        cleaned_data = process_and_clean_filings(ticker_input, download_path)
         st.success('Processing complete!')
         
-    with st.spinner('Loading cleaned data...'):
-        cleaned_data = load_cleaned_data(cleaned_data_path)
-        st.success('Data loaded!')
-
     with st.spinner('Analyzing risk factors...'):
         risk_factors_df = analyze_risk_factors(cleaned_data, openai_api_key)
-        risk_factors_path = save_analysis_results(risk_factors_df, ticker_input, "risk_factors")
         st.success('Risk factors analysis complete!')
 
     with st.spinner('Analyzing MD&A sentiment...'):
         mda_sentiment_df = analyze_mda_sentiment(cleaned_data, openai_api_key)
-        mda_sentiment_path = save_analysis_results(mda_sentiment_df, ticker_input, "mda_sentiment")
         st.success('MD&A sentiment analysis complete!')
 
     with st.spinner('Analyzing financial performance...'):
         financial_performance_df = analyze_financial_performance(cleaned_data, openai_api_key)
-        financial_performance_path = save_analysis_results(financial_performance_df, ticker_input, "financial_performance")
         st.success('Financial performance analysis complete!')
 
     # Display results
