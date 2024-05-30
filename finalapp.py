@@ -143,7 +143,7 @@ if st.button("Analyze"):
             # Define the questions
             questions = [
                 f"Summarize the main risks identified by {ticker} in its 10-K filings. In English.",
-                f"Summarize the Management's Discussion and Analysis (MDA) section for {ticker} in its 10-K filings. In English.",
+                f"How many positive words and negative words in {ticker} according to the MDA texts. In English do sentiment analysis",
             ]
 
             responses = []
