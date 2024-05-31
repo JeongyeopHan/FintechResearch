@@ -14,7 +14,7 @@ This project is part of a programming task to analyze SEC 10-K filings using an 
 ### Risk Factors Analysis
 
 #### Insight: Identification of Major Risks
-**Explanation**: Understanding the major risks identified by a company in its 10-K filings is crucial for investors, analysts, and stakeholders. These risks can significantly impact the company's performance and future prospects. By analyzing these risk factors, users can make more informed decisions about investing in or engaging with the company.
+**Explanation**: Understanding the major risks identified by a company in its 10-K filings is crucial for investors, analysts, and stakeholders and ranks of them in terms of importance. These risks can significantly impact the company's performance and future prospects. By analyzing these risk factors, users can make more informed decisions about investing in or engaging with the company.
 
 ### MD&A (Management's Discussion and Analysis) Analysis
 
@@ -32,16 +32,18 @@ OpenAI was used as the LLM API with Chroma and Langchain to improve the quality 
 
 ## Video Demo
 
-
-https://github.com/JeongyeopHan/FintechResearch/assets/133887543/4fc33294-a1b4-4128-a8e5-585d910c2c42
-
-
+https://github.com/JeongyeopHan/FintechResearch/assets/133887543/4a22a08f-129c-4a54-aa6c-5e576da387d1
 
 
 ## Results
 
-![image](https://github.com/JeongyeopHan/FintechResearch/assets/133887543/d9be95da-4416-41be-ad75-5bbce446ea75)
+![image](https://github.com/JeongyeopHan/FintechResearch/assets/133887543/aa9faa10-f694-46af-8b55-5cb0daf9b799)
 
-![image](https://github.com/JeongyeopHan/FintechResearch/assets/133887543/87dbfe4a-9b27-427e-8606-3c47b250fb0e)
 
+![image](https://github.com/JeongyeopHan/FintechResearch/assets/133887543/66cc6fc7-d30e-4697-a7f0-812924f2fbed)
+
+
+## Visualization
+
+![newplot](https://github.com/JeongyeopHan/FintechResearch/assets/133887543/6193e567-51ed-47b8-b861-a222e2a6ceab)
 
