@@ -107,10 +107,10 @@ if st.button("Analyze"):
 
             embeddings = OpenAIEmbeddings()
             
-            # Use a temporary directory for Chroma persistence
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    risk_db = Chroma.from_documents(risk_split_texts, embeddings, persist_directory=temp_dir)
+                    persist_directory = temp_dir  # Define persist_directory
+                    risk_db = Chroma.from_documents(risk_split_texts, embeddings, persist_directory=persist_directory)
                     risk_db.persist()
                 except Exception as e:
                     st.error(f"Error initializing Chroma for risk factors: {e}")
@@ -121,7 +121,8 @@ if st.button("Analyze"):
             
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    mdna_db = Chroma.from_documents(mdna_split_texts, embeddings, persist_directory=temp_dir)
+                    persist_directory = temp_dir  # Define persist_directory
+                    mdna_db = Chroma.from_documents(mdna_split_texts, embeddings, persist_directory=persist_directory)
                     mdna_db.persist()
                 except Exception as e:
                     st.error(f"Error initializing Chroma for MD&A: {e}")
@@ -133,7 +134,7 @@ if st.button("Analyze"):
             risk_tools = [
                 Tool(
                     args_schema=DocumentInput,
-                    name="risk_document_tool",  # Ensure the name matches the required pattern
+                    name="risk_document_tool",
                     description="Useful for answering questions about risk factors in the document",
                     func=RetrievalQA.from_chain_type(llm=llm, retriever=risk_db.as_retriever()),
                 )
@@ -142,7 +143,7 @@ if st.button("Analyze"):
             mdna_tools = [
                 Tool(
                     args_schema=DocumentInput,
-                    name="mdna_document_tool",  # Ensure the name matches the required pattern
+                    name="mdna_document_tool",
                     description="Useful for answering questions about MD&A sections in the document",
                     func=RetrievalQA.from_chain_type(llm=llm, retriever=mdna_db.as_retriever()),
                 )
@@ -152,7 +153,7 @@ if st.button("Analyze"):
             mdna_agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=mdna_tools, llm=llm, verbose=True)
 
             # Define the questions
-            risk_question = f"What are the top five risk factors identified by {ticker} in its 10-K filings ranked by importance? In English."
+            risk_question = f"Identify the five major risks that {ticker} identified in its 10-K filings. Please provide specific risks."
             mdna_question = "What are the key strategic initiatives outlined by the company for future growth, and how does the company plan to address any identified risks or challenges in the coming fiscal year?"
 
             # Get answers from the agents
@@ -171,9 +172,10 @@ if st.button("Analyze"):
                 fig.update_layout(title_text=title, xaxis_title="Risk Factors", yaxis_title="Importance")
                 return fig
 
-            # Example visualization for ranked risk factors
+            # Extract risk factors from the response and visualize
             risk_factors = risk_response["output"].split("\n")
-            risk_labels = [f"Risk {i+1}" for i in range(len(risk_factors))]
+            risk_factors = [rf.strip() for rf in risk_factors if rf.strip() and not rf.strip().startswith("I'm sorry")][:5]  # Get top 5 non-empty risk factors
+            risk_labels = risk_factors
             risk_values = list(range(1, len(risk_factors) + 1))  # Assign a rank value
 
             fig_risk = create_bar_chart(risk_labels, risk_values, "Ranked Risk Factors")
