@@ -174,6 +174,7 @@ if st.button("Analyze"):
 
             # Extract risk factors from the response and visualize
             risk_factors = risk_response["output"].split("\n")
+            risk_factors = [rf.strip() for rf in risk_factors if rf.strip()]  # Clean up the list
             risk_labels = [f"Risk {i+1}" for i in range(len(risk_factors))]
             risk_values = list(range(1, len(risk_factors) + 1))  # Assign a rank value
 
