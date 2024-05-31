@@ -1,0 +1,3 @@
+Here is updated URL link :https://fintechresearch-kacqefuh48jtomvnwkckuz.streamlit.app/
+
+Due to some errors from Streamlit, the app is not stable and sometimes gets deleted, so the URL has been updated.
