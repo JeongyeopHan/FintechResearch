@@ -15,6 +15,7 @@ from langchain.chains import RetrievalQA
 from langchain.agents import initialize_agent, AgentType, Tool
 from pydantic import BaseModel, Field
 from langchain.schema import Document
+import plotly.graph_objects as go
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -151,7 +152,7 @@ if st.button("Analyze"):
             mdna_agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=mdna_tools, llm=llm, verbose=True)
 
             # Define the questions
-            risk_question = f"Identify five major risks identified by {ticker} in its 10-K filings. In English."
+            risk_question = f"What are the top five risk factors identified by {ticker} in its 10-K filings ranked by importance? In English."
             mdna_question = "What are the key strategic initiatives outlined by the company for future growth, and how does the company plan to address any identified risks or challenges in the coming fiscal year?"
 
             # Get answers from the agents
@@ -163,6 +164,20 @@ if st.button("Analyze"):
 
             st.write("MD&A Analysis:")
             st.write(mdna_response["output"])
+
+            # Function to create bar chart for risk factors
+            def create_bar_chart(labels, values, title):
+                fig = go.Figure([go.Bar(x=labels, y=values)])
+                fig.update_layout(title_text=title, xaxis_title="Risk Factors", yaxis_title="Importance")
+                return fig
+
+            # Example visualization for ranked risk factors
+            risk_factors = risk_response["output"].split("\n")
+            risk_labels = [f"Risk {i+1}" for i in range(len(risk_factors))]
+            risk_values = list(range(1, len(risk_factors) + 1))  # Assign a rank value
+
+            fig_risk = create_bar_chart(risk_labels, risk_values, "Ranked Risk Factors")
+            st.plotly_chart(fig_risk)
 
         else:
             st.write("No filings found for the given ticker.")
