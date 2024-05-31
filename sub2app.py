@@ -153,7 +153,7 @@ if st.button("Analyze"):
             mdna_agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=mdna_tools, llm=llm, verbose=True)
 
             # Define the questions
-            risk_question = f"Identify the five major risks ranked by importance that {ticker} identified in its 10-K filings rank them in importance in English"
+            risk_question = f"Identify the five major risks that {ticker} identified in its 10-K filings. Please provide specific risks."
             mdna_question = "What are the key strategic initiatives outlined by the company for future growth, and how does the company plan to address any identified risks or challenges in the coming fiscal year?"
 
             # Get answers from the agents
@@ -174,8 +174,8 @@ if st.button("Analyze"):
 
             # Extract risk factors from the response and visualize
             risk_factors = risk_response["output"].split("\n")
-            risk_factors = [rf.strip() for rf in risk_factors if rf.strip() and rf.strip()[0].isdigit()][:5]  # Get top 5 non-empty risk factors
-            risk_labels = [f"Risk {i+1}" for i in range(len(risk_factors))]
+            risk_factors = [rf.strip() for rf in risk_factors if rf.strip() and not rf.strip().startswith("I'm sorry")][:5]  # Get top 5 non-empty risk factors
+            risk_labels = risk_factors
             risk_values = list(range(1, len(risk_factors) + 1))  # Assign a rank value
 
             fig_risk = create_bar_chart(risk_labels, risk_values, "Ranked Risk Factors")
