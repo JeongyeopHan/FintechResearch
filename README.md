@@ -40,7 +40,8 @@ https://github.com/JeongyeopHan/FintechResearch/assets/133887543/4fc33294-a1b4-4
 
 ## Results
 
-![image](https://github.com/JeongyeopHan/FintechResearch/assets/133887543/10aed76d-b819-425f-983b-8149fa9b6ae6)
+![image](https://github.com/JeongyeopHan/FintechResearch/assets/133887543/d9be95da-4416-41be-ad75-5bbce446ea75)
+
 ![image](https://github.com/JeongyeopHan/FintechResearch/assets/133887543/87dbfe4a-9b27-427e-8606-3c47b250fb0e)
 
 
