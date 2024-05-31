@@ -27,7 +27,7 @@ Streamlit was chosen for this project due to its user-friendly interface and abi
 
 
 ## Additional Notes
-OpenAI was used as the LLM API with Chroma and Langchain to improve the quality of LLM-generated responses. The project is divided into three parts (download.py, analyze.py, and app.py) for better modularity and maintainability. Due to some debugging issues, the subapp.py was used for the demonstration, but the modular version should work equivalently once fully debugged.
+OpenAI was used as the LLM API with Chroma and Langchain to improve the quality of LLM-generated responses. The project is divided into three parts (download.py, analyze.py, and app.py) for better modularity and maintainability. Due to some debugging issues, the finalapp.py was used for the demonstration, but the modular version should work equivalently once fully debugged.
 
 
 ## Video Demo
