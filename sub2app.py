@@ -107,10 +107,10 @@ if st.button("Analyze"):
 
             embeddings = OpenAIEmbeddings()
             
-            # Use a temporary directory for Chroma persistence
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    risk_db = Chroma.from_documents(risk_split_texts, embeddings, persist_directory=temp_dir)
+                    persist_directory = temp_dir  # Define persist_directory
+                    risk_db = Chroma.from_documents(risk_split_texts, embeddings, persist_directory=persist_directory)
                     risk_db.persist()
                 except Exception as e:
                     st.error(f"Error initializing Chroma for risk factors: {e}")
@@ -121,7 +121,8 @@ if st.button("Analyze"):
             
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    mdna_db = Chroma.from_documents(mdna_split_texts, embeddings, persist_directory=temp_dir)
+                    persist_directory = temp_dir  # Define persist_directory
+                    mdna_db = Chroma.from_documents(mdna_split_texts, embeddings, persist_directory=persist_directory)
                     mdna_db.persist()
                 except Exception as e:
                     st.error(f"Error initializing Chroma for MD&A: {e}")
@@ -171,15 +172,13 @@ if st.button("Analyze"):
                 fig.update_layout(title_text=title, xaxis_title="Risk Factors", yaxis_title="Importance")
                 return fig
 
-            # Example visualization for ranked risk factors
+            # Extract risk factors from the response and visualize
             risk_factors = risk_response["output"].split("\n")
             risk_labels = [f"Risk {i+1}" for i in range(len(risk_factors))]
             risk_values = list(range(1, len(risk_factors) + 1))  # Assign a rank value
 
             fig_risk = create_bar_chart(risk_labels, risk_values, "Ranked Risk Factors")
             st.plotly_chart(fig_risk)
-
-            # Add functionality to visualize Income Statement, Balance Sheet, and Cash Flow Statement similar to previous instructions
 
         else:
             st.write("No filings found for the given ticker.")
