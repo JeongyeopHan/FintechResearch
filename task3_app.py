@@ -4,12 +4,8 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 import streamlit as st
 import os
-from langchain.chat_models import ChatOpenAI
-from langchain.agents import initialize_agent, AgentType, Tool
-from pydantic import BaseModel, Field
-
-from task1_download import download_filings
-from task2_analyze import analyze_filings, get_filings
+from download import download_filings
+from analyze import get_filings, analyze_documents, create_bar_chart, create_line_chart
 
 # Get API keys from environment variables
 openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -19,45 +15,67 @@ if not openai_api_key:
     st.error("API keys are not set properly. Please check your environment variables.")
     st.stop()
 
+# Initialize OpenAI API
+os.environ["OPENAI_API_KEY"] = openai_api_key
+
 # Streamlit app layout
 st.title("SEC Filings Analysis with ChatGPT")
 
 ticker = st.text_input("Enter the company ticker:")
 if st.button("Analyze"):
     if ticker:
-        try:
-            download_dir = download_filings(ticker)
+        download_dir = download_filings(ticker)
 
-            # Ensure the download directory exists
-            if not os.path.exists(download_dir):
-                st.error(f"Download directory {download_dir} does not exist.")
-                st.stop()
+        if not os.path.exists(download_dir):
+            st.error(f"Download directory {download_dir} does not exist.")
+            st.stop()
 
-            risk_factor_filings, mdna_filings = get_filings(download_dir)
+        st.write(f"Checking directory: {download_dir}")
 
-            if risk_factor_filings and mdna_filings:
-                st.write(f"Found {len(risk_factor_filings)} filings with risk factors.")
-                st.write(f"Found {len(mdna_filings)} filings with MD&A sections.")
+        risk_factor_filings, financial_statements = get_filings(download_dir)
 
-                risk_agent, mdna_agent = analyze_filings(risk_factor_filings, mdna_filings, openai_api_key)
+        if risk_factor_filings and financial_statements:
+            st.write(f"Found {len(risk_factor_filings)} filings with risk factors.")
+            st.write(f"Found {len(financial_statements)} filings with financial statements.")
 
-                # Define the questions
-                risk_question = f"Identify five major risks identified by {ticker} in its 10-K filings. In English."
-                mdna_question = "What are the key strategic initiatives outlined by the company for future growth, and how does the company plan to address any identified risks or challenges in the coming fiscal year?"
+            risk_response, financial_response = analyze_documents(risk_factor_filings, financial_statements)
 
-                # Get answers from the agents
-                risk_response = risk_agent({"input": risk_question})
-                mdna_response = mdna_agent({"input": mdna_question})
+            st.write("Risk Factors Analysis:")
+            st.write(risk_response)
 
-                st.write("Risk Factors Analysis:")
-                st.write(risk_response["output"])
+            st.write("Financial Statements Summary:")
+            st.write(financial_response)
 
-                st.write("MD&A Analysis:")
-                st.write(mdna_response["output"])
-            else:
-                st.write("No filings found for the given ticker.")
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
+            # Example risk factors analysis output (replace with actual response)
+            risk_factors_ranked = [
+                {"Risk Factor": "Data Security Standards", "Importance": 5},
+                {"Risk Factor": "Fluctuating Net Sales", "Importance": 4},
+                {"Risk Factor": "Gross Margins Pressure", "Importance": 3},
+                {"Risk Factor": "New Business Strategies", "Importance": 2},
+                {"Risk Factor": "IT System Failures", "Importance": 1}
+            ]
+
+            # Example financial summary output (replace with actual response)
+            financial_summary = [
+                {"Year": 2020, "Revenue": 274515, "Net Income": 57411, "Total Assets": 323888},
+                {"Year": 2021, "Revenue": 365817, "Net Income": 94680, "Total Assets": 351002},
+                {"Year": 2022, "Revenue": 394328, "Net Income": 99983, "Total Assets": 351002}
+            ]
+
+            # Convert to DataFrame for visualization
+            risk_factors_df = pd.DataFrame(risk_factors_ranked)
+            financial_summary_df = pd.DataFrame(financial_summary)
+
+            # Create bar charts for risk factors
+            fig_risk = create_bar_chart(risk_factors_df['Risk Factor'], risk_factors_df['Importance'], 'Major Risk Factors Ranked by Importance')
+
+            # Create line charts for financial summary
+            fig_financial = create_line_chart(financial_summary_df, 'Financial Summary Over Recent Years')
+
+            st.plotly_chart(fig_risk)
+            st.plotly_chart(fig_financial)
+
+        else:
+            st.write("No filings found for the given ticker.")
     else:
         st.write("Please enter a ticker symbol.")
-
