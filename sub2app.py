@@ -153,7 +153,7 @@ if st.button("Analyze"):
             mdna_agent = initialize_agent(agent=AgentType.OPENAI_FUNCTIONS, tools=mdna_tools, llm=llm, verbose=True)
 
             # Define the questions
-            risk_question = f"Identify the five major risks ranked by importance that {ticker} identified in its 10-K filings rank them in importance in English
+            risk_question = f"Identify the five major risks ranked by importance that {ticker} identified in its 10-K filings rank them in importance in English"
             mdna_question = "What are the key strategic initiatives outlined by the company for future growth, and how does the company plan to address any identified risks or challenges in the coming fiscal year?"
 
             # Get answers from the agents
