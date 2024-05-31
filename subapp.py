@@ -175,7 +175,7 @@ if st.button("Analyze"):
             # Extract risk factors from the response and visualize
             risk_factors = risk_response["output"].split("\n")
             risk_factors = [rf.strip() for rf in risk_factors if rf.strip() and not rf.strip().startswith("I'm sorry")][:5]  # Get top 5 non-empty risk factors
-            risk_labels = risk_factors
+            risk_labels = [f"Risk {i+1}" for i in range(len(risk_factors))]
             risk_values = list(range(1, len(risk_factors) + 1))  # Assign a rank value
 
             fig_risk = create_bar_chart(risk_labels, risk_values, "Ranked Risk Factors")
