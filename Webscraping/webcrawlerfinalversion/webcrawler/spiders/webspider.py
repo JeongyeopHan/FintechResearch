@@ -1,5 +1,82 @@
+import scrapy
+from bs4 import BeautifulSoup
+from datetime import datetime
+import json
+import re
+
+class WebspiderSpider(scrapy.Spider):
+    name = 'webspider'
+    allowed_domains = ["statutes.capitol.texas.gov"]
+    chapters = [
+        '1', '11', '12', '13', '14', '15', '16', '31', '32', '33', '34', '35', '36', '37', '59', '61', '62', '63', '64', '65', '66', '67', '89', '91', '92', '93', '94', '95', '96', '97', '98', '119', '121', '122', '123', '124',
+        '125', '126', '149', '152', '154', '155', '156', '157', '158', '159', '160', '180', '181', '182', '183', '184', '185', '187', '199', '201', '202', '203', '204', '271',
+        '273', '274', '275', '276', '278', '279', '280', '281', '301', '302', '303', '304', '305', '306', '307', '308', '339', '341', '342', '343', '344', '345', '346', '349', '350', '351', '352',
+        '353', '354', '371', '391', '392', '393', '394', '395', '396', '397'
+    ]
+    start_urls = [f"https://statutes.capitol.texas.gov/Docs/FI/htm/FI.{chapter}.htm" for chapter in chapters]
+
+    def __init__(self, *args, **kwargs):
+        super(WebspiderSpider, self).__init__(*args, **kwargs)
+        self.volunteer_id = "2132"  # Replace with your actual volunteer ID
+        self.location = "Gapyeong-eup, Gapyeong-gun, South Korea"  # Replace with your actual location
+
+    def parse(self, response):
+        soup = BeautifulSoup(response.text, 'html.parser')
+        paragraphs = soup.find_all('p', class_='left')
+
+        data = []
+        current_section = None
+        section_texts = []
+
+        for p in paragraphs:
+            text = p.get_text(strip=True)
+            chapter_match = re.match(r'Sec\.\s*(\d+\.\d+)\.', text)
+            if chapter_match:
+                chapter = response.url.split('/')[-1].split('.')[1]
+                if current_section:
+                    data.append({
+                        "text": " ".join(section_texts).strip(),
+                        "metadata": {
+                            "date_downloaded": datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
+                            "site_url": response.url,
+                            "extra_data": {
+                                "chapter": chapter,
+                                "section": current_section
+                            }
+                        },
+                        "volunteer_id": self.volunteer_id,
+                        "location": self.location
+                    })
+                current_section = chapter_match.group(1)
+                # Remove the "Sec. [section number]." part from the text
+                text = text[chapter_match.end():].strip()
+                section_texts = [text]
+            else:
+                section_texts.append(text)
+
+        if current_section:
+            data.append({
+                "text": " ".join(section_texts).strip(),
+                "metadata": {
+                    "date_downloaded": datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
+                    "site_url": response.url,
+                    "extra_data": {
+                        "chapter": chapter,
+                        "section": current_section
+                    }
+                },
+                "volunteer_id": self.volunteer_id,
+                "location": self.location
+            })
+
+        # Append to the JSON file instead of overwriting it
+        with open('finance_commission.json', 'a', encoding='utf-8') as f:
+            for entry in data:
+                json.dump(entry, f, ensure_ascii=False)
+                f.write('\n')
 
 
+"""
 import scrapy
 from scrapy.selector import Selector
 from bs4 import BeautifulSoup
@@ -75,7 +152,7 @@ class WebspiderSpider(scrapy.Spider):
             for entry in data:
                 json.dump(entry, f, ensure_ascii=False)
                 f.write('\n')
-
+"""
 # This code allows to go to the link and use selenium to open the tab for each chapter. This did not work, and I was not able to debug it.
 """
 import scrapy
